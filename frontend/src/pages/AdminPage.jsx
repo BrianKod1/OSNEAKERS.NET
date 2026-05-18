@@ -19,6 +19,20 @@ export default function AdminPage() {
   });
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState(null);
+  const [digestSending, setDigestSending] = useState(false);
+
+  const sendDigest = async () => {
+    if (!confirm("Send drop digest to all subscribers?")) return;
+    setDigestSending(true);
+    try {
+      const { data } = await api.post("/admin/digest", {}, { headers });
+      toast.success(`Digest sent to ${data.sent}/${data.total_subscribers} · ${data.products_featured} products featured`);
+    } catch {
+      toast.error("Digest send failed");
+    } finally {
+      setDigestSending(false);
+    }
+  };
 
   const headers = { "X-Admin-Passcode": passcode };
 
@@ -94,7 +108,18 @@ export default function AdminPage() {
     <div className="pt-24 pb-20" data-testid="admin-page">
       <div className="mx-auto max-w-7xl px-6 lg:px-10">
         <p className="text-[10px] tracking-[0.3em] uppercase font-mono-tech text-cyan-400 mb-3">[ COMMAND CENTER ]</p>
-        <h1 className="font-display font-black text-5xl sm:text-6xl text-white tracking-tighter mb-12">ADMIN.</h1>
+        <div className="flex items-end justify-between mb-12">
+          <h1 className="font-display font-black text-5xl sm:text-6xl text-white tracking-tighter">ADMIN.</h1>
+          <button
+            onClick={sendDigest}
+            disabled={digestSending}
+            data-testid="digest-send-btn"
+            className="px-5 py-3 border border-cyan-400/40 text-cyan-400 hover:bg-cyan-400/10 text-xs font-bold tracking-[0.2em] uppercase transition-all disabled:opacity-50 flex items-center gap-2"
+          >
+            <Send className="h-3.5 w-3.5" />
+            {digestSending ? "SENDING..." : "SEND DROP DIGEST"}
+          </button>
+        </div>
 
         {/* Stats */}
         <div className="grid sm:grid-cols-3 gap-5 mb-12">

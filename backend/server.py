@@ -411,7 +411,10 @@ async def create_order(payload: OrderCreate):
         credit = round(subtotal * 0.05, 2)
         await db.referrals.update_one(
             {"code": discount_code},
-            {"$inc": {"uses": 1, "credits_earned": credit}},
+            {
+                "$inc": {"uses": 1, "credits_earned": credit},
+                "$set": {"last_credit_at": datetime.now(timezone.utc).isoformat()},
+            },
         )
 
     # Ensure buyer has their own referral code
@@ -565,12 +568,34 @@ async def validate_discount(payload: dict):
     return {"valid": False, "code": code, "percent": 0, "type": None}
 
 
+CREDIT_EXPIRY_DAYS = 90
+
+
+async def _prune_expired_credits(email: str) -> dict:
+    """Zero out credits if last accrual was >90 days ago. Returns the (possibly updated) referral doc."""
+    ref = await db.referrals.find_one({"owner_email": email.lower().strip()}, {"_id": 0})
+    if not ref:
+        return None
+    last = ref.get("last_credit_at")
+    if last and ref.get("credits_earned", 0) > 0:
+        try:
+            last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
+            if datetime.now(timezone.utc) - last_dt > timedelta(days=CREDIT_EXPIRY_DAYS):
+                await db.referrals.update_one(
+                    {"owner_email": email.lower().strip()},
+                    {"$set": {"credits_earned": 0.0, "expired_at": datetime.now(timezone.utc).isoformat()}},
+                )
+                ref["credits_earned"] = 0.0
+        except (ValueError, TypeError):
+            pass
+    return ref
+
+
 async def _get_or_create_referral(email: str) -> dict:
     email = email.lower().strip()
-    existing = await db.referrals.find_one({"owner_email": email}, {"_id": 0})
+    existing = await _prune_expired_credits(email)
     if existing:
         return existing
-    # Generate code from email prefix + 4 random chars
     prefix = "".join(c for c in email.split("@")[0] if c.isalnum()).upper()[:6] or "OS"
     code = f"{prefix}{uuid.uuid4().hex[:4].upper()}"
     ref = Referral(owner_email=email, code=code).model_dump()
@@ -697,6 +722,71 @@ async def admin_stats(x_admin_passcode: Optional[str] = None):
 
 
 from fastapi import Header  # noqa: E402
+
+
+@api_router.post("/admin/digest")
+async def send_digest(x_admin_passcode: str = Header(default="")):
+    _require_admin(x_admin_passcode)
+    # Pick top 3 highlights: prefer new, then featured
+    highlights = await db.products.find(
+        {"$or": [{"is_new": True}, {"featured": True}]}, {"_id": 0}
+    ).sort([("is_new", -1), ("featured", -1)]).to_list(3)
+    if not highlights:
+        highlights = await db.products.find({}, {"_id": 0}).to_list(3)
+
+    subscribers = await db.subscribers.find({}, {"_id": 0, "email": 1}).to_list(10000)
+    sent = 0
+    failed = 0
+    if RESEND_API_KEY:
+        for sub in subscribers:
+            ref = await _get_or_create_referral(sub["email"])
+            cards = "".join(
+                f"""<tr><td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+                    <table width="100%"><tr>
+                        <td width="80" style="padding-right:14px;"><img src="{p['image']}" width="72" height="72" style="display:block;object-fit:cover;border:1px solid rgba(255,255,255,0.08);"/></td>
+                        <td style="vertical-align:top;">
+                            <div style="font-size:10px;letter-spacing:2px;color:#71717a;text-transform:uppercase;font-weight:700;">{p['brand']}</div>
+                            <div style="color:#fff;font-size:14px;font-weight:600;margin-top:2px;">{p['name']}</div>
+                            <div style="color:#00E5FF;font-family:'Courier New',monospace;font-size:14px;margin-top:4px;">${p['price']}</div>
+                        </td>
+                    </tr></table>
+                </td></tr>""" for p in highlights
+            )
+            html = f"""<!doctype html><html><body style="margin:0;background:#050505;font-family:-apple-system,sans-serif;color:#fff;">
+              <table width="100%" style="background:#050505;padding:48px 16px;"><tr><td align="center">
+                <table width="560" style="max-width:560px;background:#0a0a0a;border:1px solid rgba(255,255,255,0.08);">
+                  <tr><td style="padding:40px 40px 16px;">
+                    <div style="font-size:11px;letter-spacing:3px;color:#00E5FF;font-weight:700;text-transform:uppercase;">[ DROP DIGEST ]</div>
+                    <h1 style="margin:14px 0 0;font-size:38px;line-height:1;letter-spacing:-1.5px;font-weight:900;text-transform:uppercase;">This week's heat.</h1>
+                  </td></tr>
+                  <tr><td style="padding:8px 40px 16px;"><table width="100%">{cards}</table></td></tr>
+                  <tr><td style="padding:8px 40px 24px;border-top:1px solid rgba(255,255,255,0.06);">
+                    <div style="font-size:11px;letter-spacing:3px;color:#CCFF00;font-weight:700;text-transform:uppercase;margin-bottom:8px;">[ YOUR STATS ]</div>
+                    <p style="margin:0;color:#a1a1aa;font-size:13px;">Code <strong style="color:#CCFF00;font-family:'Courier New',monospace;">{ref['code']}</strong> · {ref['uses']} use{('' if ref['uses']==1 else 's')} · <strong style="color:#CCFF00;">${ref['credits_earned']:.2f}</strong> credit available</p>
+                  </td></tr>
+                  <tr><td align="center" style="padding:8px 40px 40px;">
+                    <a href="https://osneakers.net/catalog" style="display:inline-block;background:#00E5FF;color:#050505;padding:14px 32px;font-weight:900;letter-spacing:3px;font-size:12px;text-decoration:none;text-transform:uppercase;">SHOP THE DROP →</a>
+                  </td></tr>
+                </table>
+              </td></tr></table></body></html>"""
+            try:
+                result = await asyncio.to_thread(
+                    resend.Emails.send,
+                    {
+                        "from": f"OSneakers <{SENDER_EMAIL}>",
+                        "to": [sub["email"]],
+                        "subject": "This week's drop digest · OSneakers",
+                        "html": html,
+                    },
+                )
+                if result.get("id"):
+                    sent += 1
+                else:
+                    failed += 1
+            except Exception as e:
+                logger.error(f"Digest send failed for {sub['email']}: {e}")
+                failed += 1
+    return {"sent": sent, "failed": failed, "total_subscribers": len(subscribers), "products_featured": len(highlights)}
 
 
 @api_router.get("/admin/overview")
