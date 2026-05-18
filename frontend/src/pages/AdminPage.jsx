@@ -209,6 +209,23 @@ export default function AdminPage() {
                 </div>
               ) : <p className="text-sm text-zinc-500">No subscribers yet.</p>}
             </div>
+
+            <div className="glass p-6" data-testid="admin-top-referrers">
+              <p className="text-[10px] tracking-[0.3em] uppercase font-mono-tech text-lime-400 mb-4">[ TOP REFERRERS ]</p>
+              {overview?.top_referrers?.length ? (
+                <div className="space-y-3">
+                  {overview.top_referrers.map((r, idx) => (
+                    <div key={r.code} className="flex justify-between items-center py-2 border-b border-white/5 last:border-0">
+                      <div className="min-w-0">
+                        <p className="text-xs text-zinc-300 truncate">#{idx + 1} {r.owner_email}</p>
+                        <p className="font-mono-tech text-[11px] text-lime-400 tracking-[2px]">{r.code} · {r.uses} use{r.uses === 1 ? "" : "s"}</p>
+                      </div>
+                      <span className="font-display font-bold text-lime-400 text-sm">${r.credits_earned.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="text-sm text-zinc-500">No referrals used yet.</p>}
+            </div>
           </div>
         </div>
       </div>

@@ -8,6 +8,7 @@ const links = [
   { to: "/catalog", label: "Catalog" },
   { to: "/about", label: "About" },
   { to: "/reviews", label: "Reviews" },
+  { to: "/account", label: "Account" },
 ];
 
 export const Navbar = () => {

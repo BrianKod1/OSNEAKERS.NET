@@ -572,6 +572,69 @@ async def get_referral(email: str):
     }
 
 
+@api_router.get("/account/{email}")
+async def get_account(email: str):
+    email = email.lower().strip()
+    ref = await _get_or_create_referral(email)
+    orders = await db.orders.find({"email": email}, {"_id": 0}).sort([("created_at", -1)]).to_list(50)
+    return {
+        "email": email,
+        "referral": {
+            "code": ref["code"],
+            "percent": ref["percent"],
+            "uses": ref["uses"],
+            "credits_earned": ref["credits_earned"],
+        },
+        "orders": orders,
+        "order_count": len(orders),
+        "total_spent": round(sum(o.get("total", 0) for o in orders), 2),
+    }
+
+
+class ShareInvite(BaseModel):
+    from_email: EmailStr
+    to_email: EmailStr
+    note: Optional[str] = None
+
+
+@api_router.post("/referral/share")
+async def share_referral(payload: ShareInvite):
+    ref = await _get_or_create_referral(payload.from_email)
+    note = (payload.note or "Thought you'd love OSneakers — premium sneakers shipped fast from Ontario.").strip()
+    sent = False
+    if RESEND_API_KEY:
+        try:
+            html = f"""<!doctype html><html><body style="margin:0;padding:0;background:#050505;font-family:-apple-system,sans-serif;color:#fff;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background:#050505;padding:48px 16px;"><tr><td align="center">
+                <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#0a0a0a;border:1px solid rgba(255,255,255,0.08);">
+                  <tr><td style="padding:40px;">
+                    <div style="font-size:11px;letter-spacing:3px;color:#00E5FF;font-weight:700;text-transform:uppercase;">[ A FRIEND SENT YOU THIS ]</div>
+                    <h1 style="margin:14px 0 16px;font-size:38px;line-height:1;letter-spacing:-1.5px;font-weight:900;text-transform:uppercase;">5% off your first drop.</h1>
+                    <p style="margin:0 0 24px;color:#a1a1aa;font-size:14px;line-height:1.7;">{note}</p>
+                    <div style="background:#050505;border:1px solid #CCFF00;padding:18px;text-align:center;margin-bottom:24px;">
+                      <div style="font-size:10px;letter-spacing:4px;color:#71717a;text-transform:uppercase;font-weight:700;margin-bottom:4px;">USE CODE</div>
+                      <div style="font-family:'Courier New',monospace;font-size:28px;letter-spacing:5px;color:#CCFF00;font-weight:700;">{ref['code']}</div>
+                    </div>
+                    <a href="https://osneakers.net" style="display:inline-block;background:#00E5FF;color:#050505;padding:14px 32px;font-weight:900;letter-spacing:3px;font-size:12px;text-decoration:none;text-transform:uppercase;">SHOP THE DROP →</a>
+                  </td></tr>
+                </table>
+              </td></tr></table></body></html>"""
+            result = await asyncio.to_thread(
+                resend.Emails.send,
+                {
+                    "from": f"OSneakers <{SENDER_EMAIL}>",
+                    "to": [payload.to_email],
+                    "reply_to": payload.from_email,
+                    "subject": f"A friend wants you to try OSneakers ({ref['percent']}% off)",
+                    "html": html,
+                },
+            )
+            sent = bool(result.get("id"))
+        except Exception as e:
+            logger.error(f"Failed to share referral: {e}")
+    return {"sent": sent, "code": ref["code"], "to": payload.to_email}
+
+
 def _require_admin(passcode: Optional[str]):
     if not passcode or passcode != ADMIN_PASSCODE:
         raise HTTPException(401, "Invalid admin passcode")
@@ -627,12 +690,16 @@ async def admin_overview(x_admin_passcode: str = Header(default="")):
     campaigns = await db.campaigns.count_documents({})
     recent_orders = await db.orders.find({}, {"_id": 0}).sort([("created_at", -1)]).to_list(10)
     recent_subs = await db.subscribers.find({}, {"_id": 0}).sort([("subscribed_at", -1)]).to_list(10)
+    top_referrers = await db.referrals.find(
+        {"uses": {"$gt": 0}}, {"_id": 0}
+    ).sort([("credits_earned", -1)]).to_list(10)
     return {
         "subscribers": subs,
         "orders": orders,
         "campaigns": campaigns,
         "recent_orders": recent_orders,
         "recent_subscribers": recent_subs,
+        "top_referrers": top_referrers,
     }
 
 
