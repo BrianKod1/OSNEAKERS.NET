@@ -145,7 +145,7 @@ export default function ProductPage() {
                     <button
                       key={s}
                       onClick={() => setSize(s)}
-                      data-testid={`size-option-${s}`}
+                      data-testid={`size-btn-${s}`}
                       className={`h-12 border text-sm font-display font-bold transition-all ${
                         size === s
                           ? "border-cyan-400 text-cyan-400 bg-cyan-400/5 shadow-[0_0_15px_rgba(0,229,255,0.25)]"

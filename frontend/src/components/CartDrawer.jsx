@@ -92,7 +92,7 @@ export const CartDrawer = () => {
         </SheetHeader>
 
         {success ? (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center" data-testid="checkout-success">
             <div className="h-16 w-16 rounded-full bg-lime-400/10 border border-lime-400/40 flex items-center justify-center mb-6 glow-lime">
               <CheckCircle2 className="h-8 w-8 text-lime-400" />
             </div>
@@ -100,7 +100,7 @@ export const CartDrawer = () => {
               YOU'RE LOCKED IN.
             </h3>
             <p className="text-zinc-400 text-sm mb-2">
-              Order <span className="font-mono-tech text-cyan-400">{success.order_number}</span>
+              Order <span className="font-mono-tech text-cyan-400" data-testid="checkout-success-order-number">{success.order_number}</span>
             </p>
             <p className="text-zinc-500 text-sm max-w-xs">
               We just emailed {success.email}. Our team will reach out within
@@ -121,13 +121,13 @@ export const CartDrawer = () => {
           >
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
               {[
-                ["customer_name", "Full Name", "text"],
-                ["email", "Email", "email"],
-                ["phone", "Phone", "tel"],
-                ["address", "Address", "text"],
-                ["city", "City", "text"],
-                ["country", "Country", "text"],
-              ].map(([k, label, type]) => (
+                ["customer_name", "Full Name", "text", "name"],
+                ["email", "Email", "email", "email"],
+                ["phone", "Phone", "tel", "phone"],
+                ["address", "Address", "text", "address"],
+                ["city", "City", "text", "city"],
+                ["country", "Country", "text", "country"],
+              ].map(([k, label, type, tid]) => (
                 <label key={k} className="block">
                   <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 font-bold">
                     {label}
@@ -137,7 +137,7 @@ export const CartDrawer = () => {
                     type={type}
                     value={form[k]}
                     onChange={handleField(k)}
-                    data-testid={`checkout-input-${k}`}
+                    data-testid={`checkout-${tid}`}
                     className="mt-1.5 w-full bg-black/40 border border-white/10 focus:border-cyan-400/60 outline-none px-3 py-2.5 text-sm transition-colors"
                   />
                 </label>
@@ -233,6 +233,7 @@ export const CartDrawer = () => {
                         <button
                           type="button"
                           onClick={() => updateQty(i.key, i.quantity - 1)}
+                          data-testid={`cart-qty-dec-${i.product_id}`}
                           className="h-7 w-7 flex items-center justify-center text-zinc-400 hover:text-cyan-400"
                           aria-label="Decrease"
                         >
@@ -244,6 +245,7 @@ export const CartDrawer = () => {
                         <button
                           type="button"
                           onClick={() => updateQty(i.key, i.quantity + 1)}
+                          data-testid={`cart-qty-inc-${i.product_id}`}
                           className="h-7 w-7 flex items-center justify-center text-zinc-400 hover:text-cyan-400"
                           aria-label="Increase"
                         >

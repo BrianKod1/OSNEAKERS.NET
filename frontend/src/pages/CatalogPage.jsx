@@ -87,7 +87,7 @@ export default function CatalogPage() {
                     <button
                       key={b}
                       onClick={() => setParam("brand", b)}
-                      data-testid={`filter-brand-${b.toLowerCase().replace(/\s+/g, "-")}`}
+                      data-testid={`filter-brand-${b}`}
                       className={`w-full text-left px-3 py-2 text-sm border transition-all ${
                         brand === b
                           ? "border-cyan-400/60 text-cyan-400 bg-cyan-400/5 shadow-[0_0_18px_rgba(0,229,255,0.15)]"
