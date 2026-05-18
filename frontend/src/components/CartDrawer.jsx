@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Sheet,
   SheetContent,
@@ -6,8 +6,8 @@ import {
   SheetTitle,
 } from "../components/ui/sheet";
 import { useCart } from "../context/CartContext";
-import { Trash2, Plus, Minus, ShoppingBag, X, CheckCircle2 } from "lucide-react";
-import { createOrder } from "../lib/api";
+import { Trash2, Plus, Minus, ShoppingBag, X, CheckCircle2, Tag } from "lucide-react";
+import { createOrder, api } from "../lib/api";
 import { toast } from "sonner";
 
 export const CartDrawer = () => {
@@ -17,12 +17,15 @@ export const CartDrawer = () => {
     setIsOpen,
     removeItem,
     updateQty,
-    total,
+    total: subtotal,
     clear,
   } = useCart();
   const [checkout, setCheckout] = useState(false);
   const [success, setSuccess] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [discountCode, setDiscountCode] = useState("");
+  const [discount, setDiscount] = useState(null); // { code, percent }
+  const [validating, setValidating] = useState(false);
   const [form, setForm] = useState({
     customer_name: "",
     email: "",
@@ -33,8 +36,44 @@ export const CartDrawer = () => {
     notes: "",
   });
 
+  // Auto-fill code captured from newsletter popup
+  useEffect(() => {
+    const saved = localStorage.getItem("osneakers_discount");
+    if (saved && !discount) {
+      setDiscountCode(saved);
+    }
+  }, [discount]);
+
+  const discountAmount = discount ? +(subtotal * (discount.percent / 100)).toFixed(2) : 0;
+  const total = +(subtotal - discountAmount).toFixed(2);
+
   const handleField = (k) => (e) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const applyDiscount = async () => {
+    if (!discountCode.trim()) return;
+    setValidating(true);
+    try {
+      const { data } = await api.post("/validate-discount", { code: discountCode });
+      if (data.valid) {
+        setDiscount({ code: data.code, percent: data.percent });
+        toast.success(`${data.percent}% off applied`);
+      } else {
+        setDiscount(null);
+        toast.error("Invalid code");
+      }
+    } catch {
+      toast.error("Could not validate code");
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const removeDiscount = () => {
+    setDiscount(null);
+    setDiscountCode("");
+    localStorage.removeItem("osneakers_discount");
+  };
 
   const submitOrder = async (e) => {
     e.preventDefault();
@@ -52,10 +91,12 @@ export const CartDrawer = () => {
           image: i.image,
         })),
         total,
+        discount_code: discount?.code || null,
       };
       const order = await createOrder(payload);
       setSuccess(order);
       clear();
+      localStorage.removeItem("osneakers_discount");
       toast.success(`Order ${order.order_number} placed!`);
     } catch (err) {
       toast.error("Could not place order. Please try again.");
@@ -157,9 +198,15 @@ export const CartDrawer = () => {
             </div>
             <div className="border-t border-white/5 p-6 space-y-3">
               <div className="flex justify-between text-sm text-zinc-400">
-                <span>Items</span>
-                <span className="font-mono-tech">${total.toFixed(2)}</span>
+                <span>Subtotal</span>
+                <span className="font-mono-tech">${subtotal.toFixed(2)}</span>
               </div>
+              {discount && (
+                <div className="flex justify-between text-sm text-lime-400" data-testid="checkout-discount-row">
+                  <span>Discount ({discount.code})</span>
+                  <span className="font-mono-tech">−${discountAmount.toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm text-zinc-400">
                 <span>Shipping</span>
                 <span className="font-mono-tech text-lime-400">FREE</span>
@@ -168,7 +215,7 @@ export const CartDrawer = () => {
                 <span className="text-xs tracking-[0.25em] uppercase text-zinc-500 font-bold">
                   Total
                 </span>
-                <span className="font-display font-black text-2xl text-white">
+                <span className="font-display font-black text-2xl text-white" data-testid="checkout-total">
                   ${total.toFixed(2)}
                 </span>
               </div>
@@ -270,11 +317,68 @@ export const CartDrawer = () => {
               ))}
             </div>
             <div className="border-t border-white/5 p-6 space-y-3">
-              <div className="flex justify-between items-baseline">
+              {/* Discount code */}
+              {discount ? (
+                <div
+                  className="flex items-center justify-between p-2.5 bg-lime-400/5 border border-lime-400/40"
+                  data-testid="cart-discount-applied"
+                >
+                  <div className="flex items-center gap-2">
+                    <Tag className="h-3.5 w-3.5 text-lime-400" />
+                    <span className="font-mono-tech text-xs text-lime-400 tracking-[3px] font-bold">
+                      {discount.code}
+                    </span>
+                    <span className="text-[10px] tracking-[0.2em] uppercase text-zinc-400">
+                      −{discount.percent}%
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={removeDiscount}
+                    data-testid="cart-discount-remove"
+                    className="text-zinc-500 hover:text-red-400"
+                    aria-label="Remove code"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Promo code"
+                    value={discountCode}
+                    onChange={(e) => setDiscountCode(e.target.value.toUpperCase())}
+                    data-testid="cart-discount-input"
+                    className="flex-1 bg-black/40 border border-white/10 focus:border-cyan-400/60 outline-none px-3 py-2 text-xs font-mono-tech tracking-[2px] uppercase transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={applyDiscount}
+                    disabled={validating || !discountCode.trim()}
+                    data-testid="cart-discount-apply"
+                    className="px-4 border border-cyan-400/40 text-cyan-400 hover:bg-cyan-400/10 text-xs font-bold tracking-[0.2em] uppercase transition-all disabled:opacity-40"
+                  >
+                    {validating ? "..." : "APPLY"}
+                  </button>
+                </div>
+              )}
+
+              <div className="flex justify-between text-sm text-zinc-400 pt-2">
+                <span>Subtotal</span>
+                <span className="font-mono-tech">${subtotal.toFixed(2)}</span>
+              </div>
+              {discount && (
+                <div className="flex justify-between text-sm text-lime-400">
+                  <span>Discount</span>
+                  <span className="font-mono-tech">−${discountAmount.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-baseline pt-2 border-t border-white/5">
                 <span className="text-xs tracking-[0.25em] uppercase text-zinc-500 font-bold">
-                  Subtotal
+                  Total
                 </span>
-                <span className="font-display font-black text-2xl text-white">
+                <span className="font-display font-black text-2xl text-white" data-testid="cart-total">
                   ${total.toFixed(2)}
                 </span>
               </div>

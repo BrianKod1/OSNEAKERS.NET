@@ -82,6 +82,7 @@ class OrderCreate(BaseModel):
     items: List[OrderItem]
     total: float
     notes: Optional[str] = None
+    discount_code: Optional[str] = None
 
 
 class Order(BaseModel):
@@ -95,9 +96,13 @@ class Order(BaseModel):
     city: str
     country: str
     items: List[OrderItem]
+    subtotal: float = 0.0
+    discount_code: Optional[str] = None
+    discount_amount: float = 0.0
     total: float
     notes: Optional[str] = None
     status: str = "pending"
+    confirmation_email_sent: bool = False
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -318,10 +323,48 @@ async def list_reviews():
 
 @api_router.post("/orders", response_model=Order)
 async def create_order(payload: OrderCreate):
+    # Recompute subtotal & discount server-side
+    subtotal = round(sum(i.price * i.quantity for i in payload.items), 2)
+    discount_amount = 0.0
+    discount_code = None
+    if payload.discount_code and payload.discount_code.strip().upper() == DISCOUNT_CODE.upper():
+        discount_code = DISCOUNT_CODE
+        discount_amount = round(subtotal * (int(DISCOUNT_PERCENT) / 100.0), 2)
+    total = round(subtotal - discount_amount, 2)
+
     order_number = f"OS{datetime.now(timezone.utc).strftime('%Y%m%d')}{uuid.uuid4().hex[:6].upper()}"
-    order = Order(order_number=order_number, **payload.model_dump())
-    doc = order.model_dump()
-    await db.orders.insert_one(doc)
+    order = Order(
+        order_number=order_number,
+        customer_name=payload.customer_name,
+        email=payload.email,
+        phone=payload.phone,
+        address=payload.address,
+        city=payload.city,
+        country=payload.country,
+        items=payload.items,
+        subtotal=subtotal,
+        discount_code=discount_code,
+        discount_amount=discount_amount,
+        total=total,
+        notes=payload.notes,
+    )
+
+    # Try sending confirmation email
+    if RESEND_API_KEY:
+        try:
+            params = {
+                "from": f"OSneakers <{SENDER_EMAIL}>",
+                "to": [payload.email],
+                "subject": f"Order {order_number} confirmed · OSneakers",
+                "html": _order_html(order),
+            }
+            result = await asyncio.to_thread(resend.Emails.send, params)
+            order.confirmation_email_sent = bool(result.get("id"))
+            logger.info(f"Sent order confirmation to {payload.email}: {result.get('id')}")
+        except Exception as e:
+            logger.error(f"Failed to send order confirmation to {payload.email}: {e}")
+
+    await db.orders.insert_one(order.model_dump())
     return order
 
 
@@ -368,6 +411,72 @@ def _welcome_html(discount_code: str, discount_percent: str) -> str:
       </body>
     </html>
     """
+
+
+def _order_html(order: "Order") -> str:
+    rows = "".join(
+        f"""<tr>
+            <td style="padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.06);color:#fff;font-size:14px;">
+                <strong style="color:#fff;font-weight:600;">{i.name}</strong>
+                <div style="color:#71717a;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-top:2px;">
+                    {f"Size {i.size} · " if i.size else ""}Qty {i.quantity}
+                </div>
+            </td>
+            <td align="right" style="padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.06);color:#fff;font-family:'Courier New',monospace;font-size:14px;">${i.price * i.quantity:.2f}</td>
+        </tr>"""
+        for i in order.items
+    )
+    discount_row = (
+        f"""<tr><td style="padding:6px 0;color:#CCFF00;font-size:13px;">Discount ({order.discount_code})</td>
+        <td align="right" style="padding:6px 0;color:#CCFF00;font-family:'Courier New',monospace;font-size:13px;">−${order.discount_amount:.2f}</td></tr>"""
+        if order.discount_amount > 0 else ""
+    )
+    return f"""
+    <!doctype html><html><body style="margin:0;padding:0;background:#050505;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;color:#fff;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#050505;padding:48px 16px;">
+        <tr><td align="center">
+          <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#0a0a0a;border:1px solid rgba(255,255,255,0.08);">
+            <tr><td style="padding:40px 40px 8px;">
+              <div style="font-size:11px;letter-spacing:3px;color:#00E5FF;font-weight:700;text-transform:uppercase;">[ ORDER CONFIRMED ]</div>
+              <h1 style="margin:14px 0 6px;font-size:38px;line-height:1;letter-spacing:-1.5px;color:#fff;font-weight:900;text-transform:uppercase;">You're locked in.</h1>
+              <p style="margin:8px 0 0;font-size:12px;letter-spacing:3px;color:#71717a;text-transform:uppercase;font-weight:700;">{order.order_number}</p>
+            </td></tr>
+            <tr><td style="padding:24px 40px 0;">
+              <p style="margin:0;color:#a1a1aa;font-size:14px;line-height:1.7;">Hey {order.customer_name.split()[0]} — we got your order. Our team will reach out within the hour to confirm sizing & payment.</p>
+            </td></tr>
+            <tr><td style="padding:24px 40px 8px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">{rows}</table>
+            </td></tr>
+            <tr><td style="padding:8px 40px 24px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr><td style="padding:6px 0;color:#a1a1aa;font-size:13px;">Subtotal</td>
+                <td align="right" style="padding:6px 0;color:#a1a1aa;font-family:'Courier New',monospace;font-size:13px;">${order.subtotal:.2f}</td></tr>
+                {discount_row}
+                <tr><td style="padding:6px 0;color:#a1a1aa;font-size:13px;">Shipping</td>
+                <td align="right" style="padding:6px 0;color:#CCFF00;font-family:'Courier New',monospace;font-size:13px;">FREE</td></tr>
+                <tr><td style="padding:14px 0 6px;border-top:1px solid rgba(255,255,255,0.1);color:#fff;font-size:13px;letter-spacing:3px;text-transform:uppercase;font-weight:700;">Total</td>
+                <td align="right" style="padding:14px 0 6px;border-top:1px solid rgba(255,255,255,0.1);color:#00E5FF;font-family:'Courier New',monospace;font-size:24px;font-weight:700;">${order.total:.2f}</td></tr>
+              </table>
+            </td></tr>
+            <tr><td style="padding:8px 40px 40px;color:#71717a;font-size:11px;line-height:1.7;">
+              <strong style="color:#fff;letter-spacing:2px;text-transform:uppercase;">Ship to</strong><br/>
+              {order.customer_name}<br/>{order.address}<br/>{order.city}, {order.country}<br/>{order.phone}
+            </td></tr>
+            <tr><td style="padding:24px 40px;border-top:1px solid rgba(255,255,255,0.06);color:#71717a;font-size:11px;">
+              OSneakers · Ontario, Canada · est. 2018<br/>Questions? Reply to this email or call +1 (289) 600-7311.
+            </td></tr>
+          </table>
+        </td></tr>
+      </table>
+    </body></html>"""
+
+
+@api_router.post("/validate-discount")
+async def validate_discount(payload: dict):
+    code = (payload.get("code") or "").strip().upper()
+    if code == DISCOUNT_CODE.upper():
+        return {"valid": True, "code": DISCOUNT_CODE, "percent": int(DISCOUNT_PERCENT)}
+    return {"valid": False, "code": code, "percent": 0}
 
 
 @api_router.post("/subscribe", response_model=SubscribeResponse)
