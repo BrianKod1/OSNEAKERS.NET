@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { fetchProduct, fetchProducts } from "../lib/api";
 import { ChevronLeft, Shield, Truck, RefreshCw, Star } from "lucide-react";
@@ -10,20 +10,29 @@ export default function ProductPage() {
   const { id } = useParams();
   const [product, setProduct] = useState(null);
   const [size, setSize] = useState(null);
+  const [activeImage, setActiveImage] = useState(null);
   const [related, setRelated] = useState([]);
   const { addItem } = useCart();
 
   useEffect(() => {
     setProduct(null);
     setSize(null);
+    setActiveImage(null);
     fetchProduct(id).then((p) => {
       setProduct(p);
       setSize(p.sizes?.[0] || null);
+      setActiveImage(p.image);
       fetchProducts({ brand: p.brand }).then((rs) =>
         setRelated(rs.filter((x) => x.id !== p.id).slice(0, 4)),
       );
     });
   }, [id]);
+
+  const allImages = useMemo(() => {
+    if (!product) return [];
+    const list = [product.image, ...(product.gallery || [])].filter(Boolean);
+    return Array.from(new Set(list));
+  }, [product]);
 
   if (!product) {
     return (
@@ -61,9 +70,9 @@ export default function ProductPage() {
         </Link>
 
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-16">
-          {/* Image */}
+          {/* Image gallery */}
           <div className="relative">
-            <div className="sticky top-24">
+            <div className="sticky top-24 space-y-4">
               <div className="relative glass overflow-hidden aspect-square bg-gradient-to-br from-zinc-900 via-black to-zinc-950">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_60%,rgba(0,229,255,0.18),transparent_60%)]"></div>
                 {product.tag && (
@@ -72,12 +81,32 @@ export default function ProductPage() {
                   </span>
                 )}
                 <img
-                  src={product.image}
+                  key={activeImage}
+                  src={activeImage || product.image}
                   alt={product.name}
                   data-testid="product-image"
-                  className="absolute inset-0 w-full h-full object-cover"
+                  className="absolute inset-0 w-full h-full object-cover animate-fade-up"
                 />
               </div>
+              {allImages.length > 1 && (
+                <div className="grid grid-cols-5 gap-2" data-testid="product-gallery">
+                  {allImages.map((img, idx) => (
+                    <button
+                      key={img}
+                      type="button"
+                      onClick={() => setActiveImage(img)}
+                      data-testid={`gallery-thumb-${idx}`}
+                      className={`relative aspect-square overflow-hidden border transition-all bg-black ${
+                        activeImage === img
+                          ? "border-cyan-400 shadow-[0_0_18px_rgba(0,229,255,0.4)]"
+                          : "border-white/10 hover:border-white/30 opacity-70 hover:opacity-100"
+                      }`}
+                    >
+                      <img src={img} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -137,16 +166,18 @@ export default function ProductPage() {
                     Size
                   </p>
                   <p className="text-[10px] tracking-[0.3em] uppercase font-mono-tech text-zinc-500">
-                    US
+                    {product.sizes[0]?.includes("/") ? "EU / US" : "US"}
                   </p>
                 </div>
-                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                <div className={`grid gap-2 ${product.sizes[0]?.includes("/") ? "grid-cols-3 sm:grid-cols-5" : "grid-cols-4 sm:grid-cols-6"}`}>
                   {product.sizes.map((s) => (
                     <button
                       key={s}
                       onClick={() => setSize(s)}
-                      data-testid={`size-btn-${s}`}
-                      className={`h-12 border text-sm font-display font-bold transition-all ${
+                      data-testid={`size-btn-${s.replace(/[\s/]/g, "-")}`}
+                      className={`h-12 px-1 border font-display font-bold transition-all ${
+                        s.includes("/") ? "text-[11px] tracking-tight" : "text-sm"
+                      } ${
                         size === s
                           ? "border-cyan-400 text-cyan-400 bg-cyan-400/5 shadow-[0_0_15px_rgba(0,229,255,0.25)]"
                           : "border-white/10 text-zinc-300 hover:border-white/30"

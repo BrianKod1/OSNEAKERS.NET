@@ -56,8 +56,15 @@ Core pages: Home (floating sneaker hero), Catalog (brand/price filters & sort), 
 - ✅ New dedicated **OrderDetailPage** (`/order/:orderNumber`) — full receipt view with status badge, items, breakdown, ship-to, "what's next" CTA, support footer
 - ✅ Backend lint clean (ruff), frontend lint clean (eslint)
 
+## Implemented (Feb 2026 — First real product + Gallery feature)
+- ✅ Added **New Balance 471 'Tan Suede'** — $180, EU 36–45 with dual EU/US sizing, 5 product photos (1 hero + 4 gallery)
+- ✅ Built product image gallery: thumbnail strip below hero, click-to-swap with neon cyan focus state and fade-up animation
+- ✅ Size selector now adapts to dual EU/US sizes (smaller font + 5-col grid + "EU / US" label) and falls back to original US grid for legacy products
+- ✅ `ProductUpsert` schema extended to accept `gallery: List[str]` so admin API can write multi-image products
+- ✅ Test order email delivered to brian.kodawa@gmail.com (`OS20260518687F2D`) — Resend confirmed `email_sent: true`
+
 ## Backlog / Next
-- P0: User-supplied real product images
+- P0: Replace remaining Unsplash placeholder products with real photos as user uploads them
 - P1: Real payment integration (Stripe) — deferred per user ("Hostinger will connect us to Stripe at migration")
 - P2: Wishlist + size guide modal
 - P2: Search with autocomplete

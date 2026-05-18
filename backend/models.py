@@ -146,6 +146,7 @@ class ProductUpsert(BaseModel):
     price: float
     original_price: Optional[float] = None
     image: str
+    gallery: List[str] = []
     description: str = ""
     sizes: List[str] = []
     stock: int = 10
