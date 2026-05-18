@@ -1,0 +1,125 @@
+{
+  "theme": "dark",
+  "archetype": "7 (Electric & Neon) mixed with 5 (Jewel & Luxury)",
+  "colors": {
+    "background": {
+      "primary": "#050505",
+      "secondary": "#0A0A0A",
+      "tertiary": "#121212"
+    },
+    "text": {
+      "primary": "#FFFFFF",
+      "secondary": "#A1A1AA",
+      "muted": "#71717A"
+    },
+    "accents": {
+      "primary": "#00E5FF", 
+      "secondary": "#CCFF00" 
+    },
+    "borders": {
+      "default": "rgba(255, 255, 255, 0.1)",
+      "hover": "rgba(0, 229, 255, 0.5)"
+    }
+  },
+  "typography": {
+    "fonts": {
+      "heading": "Outfit",
+      "body": "Manrope",
+      "mono": "JetBrains Mono"
+    },
+    "rules": {
+      "h1": "text-5xl sm:text-6xl+ font-black tracking-tighter uppercase",
+      "h2": "text-3xl sm:text-4xl font-bold tracking-tight",
+      "h3": "text-xl sm:text-2xl font-semibold",
+      "body": "text-base leading-relaxed font-light",
+      "label": "text-xs tracking-[0.2em] uppercase font-bold text-zinc-400"
+    }
+  },
+  "effects": {
+    "glassmorphism": {
+      "card": "bg-black/40 backdrop-blur-xl backdrop-saturate-150 border border-white/10 shadow-lg",
+      "header": "bg-black/60 backdrop-blur-2xl border-b border-white/5",
+      "hover": "hover:bg-black/60 hover:border-cyan-400/50 hover:shadow-[0_0_30px_rgba(0,229,255,0.15)] transition-all duration-300"
+    },
+    "neon_glow": {
+      "blue": "shadow-[0_0_20px_rgba(0,229,255,0.4)]",
+      "lime": "shadow-[0_0_20px_rgba(204,255,0,0.4)]"
+    }
+  },
+  "layout": {
+    "spacing": "Generous spacing. Use p-8 to p-12 for sections. Containers must have padding to prevent text collision.",
+    "grid": "Bento grid protocol for visual tension. Asymmetric for marketing areas, dense functional grid for the product catalog."
+  },
+  "components": {
+    "Navbar": "Sticky header with crystal glass effect. z-50. Navigation links must be visible on desktop. Neon hover states on links.",
+    "HeroSection": "Bold text (Outfit font). Central floating sneaker. Background uses abstract boutique vibe or dark gradient to isolate the sneaker. Use framer-motion for smooth entrance and floating animation.",
+    "ProductCard": "Use glassmorphism. True black or dark slate base. Border thin white/10. On hover, apply neon blue/lime glowing border. Product image max-height 300px. Buy now button in accent color.",
+    "Button": {
+      "primary": "bg-cyan-400 text-black font-bold uppercase tracking-widest rounded-none hover:shadow-[0_0_20px_rgba(0,229,255,0.6)] transition-all",
+      "secondary": "bg-transparent border border-white/20 text-white font-bold hover:border-lime-400 hover:text-lime-400 hover:shadow-[0_0_15px_rgba(204,255,0,0.3)]"
+    },
+    "CategoryFilters": "Pill-shaped or clean minimal list. Active state glowing.",
+    "AboutUs": "Dark aesthetic with typography focused on trust (7 years experience). High contrast white text on dark slate. Use 1px borders.",
+    "Footer": "Dark theme, large typography. 'Let's Talk' massive CTA. Email and phone numbers clearly visible."
+  },
+  "media": {
+    "hero": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/62a4fd29-460d-4991-af75-591a4e3a3d94/images/d5bfa6c8ecb0b5cb93ec89bdc5253a2333705b1a6911aaa980b455e45deb63ee.png",
+      "description": "Floating futuristic sneaker for the main hero."
+    },
+    "backgrounds": {
+      "boutique": "https://static.prod-images.emergentagent.com/jobs/62a4fd29-460d-4991-af75-591a4e3a3d94/images/f66984ec0389844df4468b2efd9a0928c92777f799636282debdc354d01c238f.png",
+      "description": "Subtle background texture/image for about or hero section if needed."
+    },
+    "products": [
+      {
+        "url": "https://images.unsplash.com/photo-1597045566677-8cf032ed6634?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1OTV8MHwxfHNlYXJjaHwzfHxhaXIlMjBqb3JkYW4lMjBzaG9lfGVufDB8fHx8MTc3OTEzNjU1MHww&ixlib=rb-4.1.0&q=85",
+        "name": "Air Jordan 1 High",
+        "brand": "Air Jordan"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1656944227421-416b1d2186c9?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1OTV8MHwxfHNlYXJjaHwyfHxhaXIlMjBqb3JkYW4lMjBzaG9lfGVufDB8fHx8MTc3OTEzNjU1MHww&ixlib=rb-4.1.0&q=85",
+        "name": "Air Jordan Low Red",
+        "brand": "Air Jordan"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1556906781-9a412961c28c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1OTV8MHwxfHNlYXJjaHwxfHxhaXIlMjBqb3JkYW4lMjBzaG9lfGVufDB8fHx8MTc3OTEzNjU1MHww&ixlib=rb-4.1.0&q=85",
+        "name": "Air Jordan 1 Low",
+        "brand": "Air Jordan"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1520316587275-5e4f06f355e6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzN8MHwxfHNlYXJjaHw0fHxzbmVha2VyJTIwZGFyayUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzc5MTM2NTUwfDA&ixlib=rb-4.1.0&q=85",
+        "name": "Nike Dunk Low Assorted",
+        "brand": "Nike"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1585232004423-244e0e6904e3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzN8MHwxfHNlYXJjaHwzfHxzbmVha2VyJTIwZGFyayUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzc5MTM2NTUwfDA&ixlib=rb-4.1.0&q=85",
+        "name": "Nike Athletic Orange/Black",
+        "brand": "Nike"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1605523741177-cd660595c2cf?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzN8MHwxfHNlYXJjaHwxfHxzbmVha2VyJTIwZGFyayUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzc5MTM2NTUwfDA&ixlib=rb-4.1.0&q=85",
+        "name": "Nike Basketball Red/White",
+        "brand": "Nike"
+      }
+    ]
+  },
+  "testing": {
+    "attributes": "All interactive elements MUST use data-testid attributes (e.g., data-testid='hero-shop-button', data-testid='product-card-1', data-testid='category-filter-nike')."
+  },
+  "instructions_to_main_agent": [
+    "Build the application using React and Tailwind CSS.",
+    "Use standard HTML + Tailwind for marketing sections (Hero, About Us) for asymmetric and creative layouts.",
+    "Use Shadcn UI components for functional elements (cart drawer, select filters, standard product grid).",
+    "Apply 'Outfit' for all headings and 'Manrope' for body text. Make sure these fonts are imported via Google Fonts in index.css.",
+    "Strictly follow the dark mode color palette (true black/deep slate) and use glassmorphism for product cards.",
+    "Ensure 'electric blue' and 'cyber lime' are only used for hover states and subtle glows to maintain the high-end feel.",
+    "Use the provided media URLs for the hero section and product catalog.",
+    "Include an 'About Us' section mentioning '7 years experience', trusted suppliers, and premium quality, based in 'Ontario, Canada'.",
+    "Add a 'Reviews' section showcasing fulfillment proof and customer satisfaction.",
+    "Add a Contact footer with email 'osneakers9@gmail.com' and phone '+12896007311'.",
+    "Implement modern, high-speed, app-like navigation and transitions (e.g. using framer-motion).",
+    "Ensure the hero image uses the custom generated URL showing the floating sneaker with neon lighting.",
+    "Add 'data-testid' to all interactive elements."
+  ]
+}
