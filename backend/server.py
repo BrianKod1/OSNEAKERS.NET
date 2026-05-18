@@ -726,6 +726,92 @@ async def admin_stats(x_admin_passcode: Optional[str] = None):
 from fastapi import Header  # noqa: E402
 
 
+class ProductUpsert(BaseModel):
+    name: str
+    brand: str
+    price: float
+    original_price: Optional[float] = None
+    image: str
+    description: str = ""
+    sizes: List[str] = []
+    stock: int = 10
+    featured: bool = False
+    is_new: bool = False
+    tag: Optional[str] = None
+
+
+@api_router.post("/admin/products", response_model=Product)
+async def admin_create_product(payload: ProductUpsert, x_admin_passcode: str = Header(default="")):
+    _require_admin(x_admin_passcode)
+    p = Product(**payload.model_dump())
+    await db.products.insert_one(p.model_dump())
+    return p
+
+
+@api_router.put("/admin/products/{product_id}", response_model=Product)
+async def admin_update_product(product_id: str, payload: ProductUpsert, x_admin_passcode: str = Header(default="")):
+    _require_admin(x_admin_passcode)
+    update = payload.model_dump()
+    res = await db.products.update_one({"id": product_id}, {"$set": update})
+    if res.matched_count == 0:
+        raise HTTPException(404, "Product not found")
+    doc = await db.products.find_one({"id": product_id}, {"_id": 0})
+    return doc
+
+
+@api_router.delete("/admin/products/{product_id}")
+async def admin_delete_product(product_id: str, x_admin_passcode: str = Header(default="")):
+    _require_admin(x_admin_passcode)
+    res = await db.products.delete_one({"id": product_id})
+    return {"deleted": res.deleted_count}
+
+
+async def _run_credit_reminder() -> dict:
+    """Every Monday — nudge users whose credits expire within 14 days."""
+    now = datetime.now(timezone.utc)
+    threshold = (now - timedelta(days=CREDIT_EXPIRY_DAYS - 14)).isoformat()
+    cutoff = (now - timedelta(days=CREDIT_EXPIRY_DAYS)).isoformat()
+    candidates = await db.referrals.find(
+        {"credits_earned": {"$gt": 0}, "last_credit_at": {"$lt": threshold, "$gt": cutoff}},
+        {"_id": 0},
+    ).to_list(10000)
+    sent = 0
+    if RESEND_API_KEY:
+        for r in candidates:
+            try:
+                html = f"""<!doctype html><html><body style="margin:0;background:#050505;font-family:-apple-system,sans-serif;color:#fff;">
+                  <table width="100%" style="background:#050505;padding:48px 16px;"><tr><td align="center">
+                    <table width="560" style="max-width:560px;background:#0a0a0a;border:1px solid rgba(255,255,255,0.08);">
+                      <tr><td style="padding:40px;">
+                        <div style="font-size:11px;letter-spacing:3px;color:#CCFF00;font-weight:700;text-transform:uppercase;">[ USE IT OR LOSE IT ]</div>
+                        <h1 style="margin:14px 0 16px;font-size:38px;line-height:1;letter-spacing:-1.5px;font-weight:900;text-transform:uppercase;">${r['credits_earned']:.2f} expiring soon.</h1>
+                        <p style="margin:0 0 24px;color:#a1a1aa;font-size:14px;line-height:1.7;">Your referral credits expire in under 14 days. Lock in something fresh before the timer hits zero.</p>
+                        <a href="https://osneakers.net/catalog" style="display:inline-block;background:#CCFF00;color:#050505;padding:14px 32px;font-weight:900;letter-spacing:3px;font-size:12px;text-decoration:none;text-transform:uppercase;">REDEEM NOW →</a>
+                      </td></tr>
+                    </table>
+                  </td></tr></table></body></html>"""
+                result = await asyncio.to_thread(
+                    resend.Emails.send,
+                    {
+                        "from": f"OSneakers <{SENDER_EMAIL}>",
+                        "to": [r["owner_email"]],
+                        "subject": f"${r['credits_earned']:.2f} in credits expiring soon",
+                        "html": html,
+                    },
+                )
+                if result.get("id"):
+                    sent += 1
+            except Exception as e:
+                logger.error(f"Credit reminder failed for {r['owner_email']}: {e}")
+    return {"sent": sent, "candidates": len(candidates)}
+
+
+@api_router.post("/admin/credit-reminder")
+async def admin_credit_reminder(x_admin_passcode: str = Header(default="")):
+    _require_admin(x_admin_passcode)
+    return await _run_credit_reminder()
+
+
 @api_router.post("/admin/digest")
 async def send_digest(x_admin_passcode: str = Header(default="")):
     _require_admin(x_admin_passcode)
@@ -932,6 +1018,12 @@ async def seed_db():
             _run_digest,
             CronTrigger(day_of_week="fri", hour=10, minute=0),
             id="weekly_digest",
+            replace_existing=True,
+        )
+        scheduler.add_job(
+            _run_credit_reminder,
+            CronTrigger(day_of_week="mon", hour=10, minute=0),
+            id="weekly_credit_reminder",
             replace_existing=True,
         )
         scheduler.start()

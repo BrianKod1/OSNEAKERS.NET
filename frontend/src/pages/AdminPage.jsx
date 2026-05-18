@@ -110,15 +110,30 @@ export default function AdminPage() {
         <p className="text-[10px] tracking-[0.3em] uppercase font-mono-tech text-cyan-400 mb-3">[ COMMAND CENTER ]</p>
         <div className="flex items-end justify-between mb-12">
           <h1 className="font-display font-black text-5xl sm:text-6xl text-white tracking-tighter">ADMIN.</h1>
-          <button
-            onClick={sendDigest}
-            disabled={digestSending}
-            data-testid="digest-send-btn"
-            className="px-5 py-3 border border-cyan-400/40 text-cyan-400 hover:bg-cyan-400/10 text-xs font-bold tracking-[0.2em] uppercase transition-all disabled:opacity-50 flex items-center gap-2"
-          >
-            <Send className="h-3.5 w-3.5" />
-            {digestSending ? "SENDING..." : "SEND DROP DIGEST"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={async () => {
+                if (!confirm("Run credit reminder now?")) return;
+                try {
+                  const { data } = await api.post("/admin/credit-reminder", {}, { headers });
+                  toast.success(`Reminders: ${data.sent}/${data.candidates}`);
+                } catch { toast.error("Failed"); }
+              }}
+              data-testid="reminder-send-btn"
+              className="px-4 py-3 border border-lime-400/40 text-lime-400 hover:bg-lime-400/10 text-xs font-bold tracking-[0.2em] uppercase transition-all"
+            >
+              CREDIT REMINDER
+            </button>
+            <button
+              onClick={sendDigest}
+              disabled={digestSending}
+              data-testid="digest-send-btn"
+              className="px-4 py-3 border border-cyan-400/40 text-cyan-400 hover:bg-cyan-400/10 text-xs font-bold tracking-[0.2em] uppercase transition-all disabled:opacity-50 flex items-center gap-2"
+            >
+              <Send className="h-3.5 w-3.5" />
+              {digestSending ? "SENDING..." : "DIGEST"}
+            </button>
+          </div>
         </div>
 
         {/* Stats */}
