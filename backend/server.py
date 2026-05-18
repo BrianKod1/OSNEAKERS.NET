@@ -10,7 +10,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 
 ROOT_DIR = Path(__file__).parent
@@ -24,6 +24,7 @@ RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
 SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'onboarding@resend.dev')
 DISCOUNT_CODE = os.environ.get('DISCOUNT_CODE', 'SNEAK10')
 DISCOUNT_PERCENT = os.environ.get('DISCOUNT_PERCENT', '10')
+ADMIN_PASSCODE = os.environ.get('ADMIN_PASSCODE', 'osneakers-admin-2026')
 if RESEND_API_KEY:
     resend.api_key = RESEND_API_KEY
 
@@ -116,6 +117,25 @@ class SubscribeResponse(BaseModel):
     discount_percent: int
     email_sent: bool
     message: str
+
+
+class CampaignCreate(BaseModel):
+    code: str
+    percent: int
+    subject: str
+    headline: str
+    body: str
+    expires_hours: int = 24
+
+
+class CampaignResult(BaseModel):
+    id: str
+    code: str
+    percent: int
+    sent_count: int
+    failed_count: int
+    total_subscribers: int
+    expires_at: str
 
 
 # ============== Seed Data ==============
@@ -474,9 +494,139 @@ def _order_html(order: "Order") -> str:
 @api_router.post("/validate-discount")
 async def validate_discount(payload: dict):
     code = (payload.get("code") or "").strip().upper()
+    # Static evergreen code from env
     if code == DISCOUNT_CODE.upper():
         return {"valid": True, "code": DISCOUNT_CODE, "percent": int(DISCOUNT_PERCENT)}
+    # Active campaign code (case-insensitive, not expired)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    camp = await db.campaigns.find_one(
+        {"code": code, "expires_at": {"$gt": now_iso}},
+        {"_id": 0},
+    )
+    if camp:
+        return {"valid": True, "code": camp["code"], "percent": int(camp["percent"])}
     return {"valid": False, "code": code, "percent": 0}
+
+
+def _require_admin(passcode: Optional[str]):
+    if not passcode or passcode != ADMIN_PASSCODE:
+        raise HTTPException(401, "Invalid admin passcode")
+
+
+def _campaign_html(code: str, percent: int, headline: str, body: str, expires_at: str) -> str:
+    return f"""
+    <!doctype html><html><body style="margin:0;padding:0;background:#050505;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;color:#fff;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#050505;padding:48px 16px;">
+        <tr><td align="center">
+          <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#0a0a0a;border:1px solid rgba(255,255,255,0.08);">
+            <tr><td style="padding:40px 40px 12px;">
+              <div style="font-size:11px;letter-spacing:3px;color:#CCFF00;font-weight:700;text-transform:uppercase;">[ FLASH DROP · 24H ]</div>
+              <h1 style="margin:16px 0 0;font-size:42px;line-height:1;letter-spacing:-1.5px;color:#fff;font-weight:900;text-transform:uppercase;">{headline}</h1>
+            </td></tr>
+            <tr><td style="padding:16px 40px 24px;color:#a1a1aa;font-size:14px;line-height:1.7;">{body}</td></tr>
+            <tr><td align="center" style="padding:8px 40px 24px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" style="background:#050505;border:1px solid #CCFF00;">
+                <tr><td align="center" style="padding:22px 36px;">
+                  <div style="font-size:10px;letter-spacing:4px;color:#71717a;text-transform:uppercase;font-weight:700;margin-bottom:6px;">{percent}% OFF · CODE</div>
+                  <div style="font-family:'Courier New',monospace;font-size:32px;letter-spacing:6px;color:#CCFF00;font-weight:700;">{code}</div>
+                </td></tr>
+              </table>
+              <p style="margin:12px 0 0;font-size:10px;letter-spacing:3px;color:#71717a;text-transform:uppercase;">Expires {expires_at[:16].replace('T',' ')} UTC</p>
+            </td></tr>
+            <tr><td align="center" style="padding:0 40px 40px;">
+              <a href="https://osneakers.net" style="display:inline-block;background:#CCFF00;color:#050505;padding:16px 36px;font-weight:900;letter-spacing:3px;font-size:12px;text-decoration:none;text-transform:uppercase;">SHOP NOW →</a>
+            </td></tr>
+            <tr><td style="padding:24px 40px;border-top:1px solid rgba(255,255,255,0.06);color:#71717a;font-size:11px;">
+              OSneakers · Ontario, Canada · est. 2018
+            </td></tr>
+          </table>
+        </td></tr>
+      </table>
+    </body></html>"""
+
+
+@api_router.get("/admin/stats")
+async def admin_stats(x_admin_passcode: Optional[str] = None):
+    # FastAPI auto-binds header `X-Admin-Passcode` to this param via Header dep, but
+    # to keep it simple we accept it via query OR header below.
+    pass  # placeholder, overridden by route below
+
+
+from fastapi import Header  # noqa: E402
+
+
+@api_router.get("/admin/overview")
+async def admin_overview(x_admin_passcode: str = Header(default="")):
+    _require_admin(x_admin_passcode)
+    subs = await db.subscribers.count_documents({})
+    orders = await db.orders.count_documents({})
+    campaigns = await db.campaigns.count_documents({})
+    recent_orders = await db.orders.find({}, {"_id": 0}).sort([("created_at", -1)]).to_list(10)
+    recent_subs = await db.subscribers.find({}, {"_id": 0}).sort([("subscribed_at", -1)]).to_list(10)
+    return {
+        "subscribers": subs,
+        "orders": orders,
+        "campaigns": campaigns,
+        "recent_orders": recent_orders,
+        "recent_subscribers": recent_subs,
+    }
+
+
+@api_router.post("/admin/campaigns", response_model=CampaignResult)
+async def send_campaign(
+    payload: CampaignCreate,
+    x_admin_passcode: str = Header(default=""),
+):
+    _require_admin(x_admin_passcode)
+
+    code = payload.code.strip().upper()
+    expires_at = (datetime.now(timezone.utc) + timedelta(hours=max(1, payload.expires_hours))).isoformat()
+    campaign_id = str(uuid.uuid4())
+
+    await db.campaigns.insert_one({
+        "id": campaign_id,
+        "code": code,
+        "percent": payload.percent,
+        "subject": payload.subject,
+        "headline": payload.headline,
+        "body": payload.body,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "expires_at": expires_at,
+    })
+
+    subscribers = await db.subscribers.find({}, {"_id": 0, "email": 1}).to_list(10000)
+    sent = 0
+    failed = 0
+    if RESEND_API_KEY and subscribers:
+        html = _campaign_html(code, payload.percent, payload.headline, payload.body, expires_at)
+        for sub in subscribers:
+            try:
+                result = await asyncio.to_thread(
+                    resend.Emails.send,
+                    {
+                        "from": f"OSneakers <{SENDER_EMAIL}>",
+                        "to": [sub["email"]],
+                        "subject": payload.subject,
+                        "html": html,
+                    },
+                )
+                if result.get("id"):
+                    sent += 1
+                else:
+                    failed += 1
+            except Exception as e:
+                logger.error(f"Campaign send failed for {sub['email']}: {e}")
+                failed += 1
+
+    return CampaignResult(
+        id=campaign_id,
+        code=code,
+        percent=payload.percent,
+        sent_count=sent,
+        failed_count=failed,
+        total_subscribers=len(subscribers),
+        expires_at=expires_at,
+    )
 
 
 @api_router.post("/subscribe", response_model=SubscribeResponse)

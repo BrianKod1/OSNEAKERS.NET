@@ -11,6 +11,7 @@ import CatalogPage from "./pages/CatalogPage";
 import ProductPage from "./pages/ProductPage";
 import AboutPage from "./pages/AboutPage";
 import ReviewsPage from "./pages/ReviewsPage";
+import AdminPage from "./pages/AdminPage";
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
             <Route path="/product/:id" element={<ProductPage />} />
             <Route path="/about" element={<AboutPage />} />
             <Route path="/reviews" element={<ReviewsPage />} />
+            <Route path="/admin" element={<AdminPage />} />
           </Routes>
           <Footer />
           <CartDrawer />
