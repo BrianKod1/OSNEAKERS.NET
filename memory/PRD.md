@@ -38,10 +38,16 @@ Core pages: Home (floating sneaker hero), Catalog (brand/price filters & sort), 
 - ✅ Footer with email/phone/Ontario contact, large CTA
 - ✅ Dark theme + cyan/lime neon accents + animated floats & marquee
 
+## Implemented (Feb 2026 — Resend production sender)
+- ✅ `SENDER_EMAIL` updated to `noreply@osneakers.net` in `/app/backend/.env`
+- ✅ Backend restarted cleanly (apscheduler crons re-armed: weekly digest + credit reminders)
+- ✅ Verified via `/api/subscribe` → `email_sent: true`, no Resend errors in logs
+- ✅ Production emails (welcome, order confirmation, weekly digest, credit reminders) now send from verified domain
+
 ## Backlog / Next
 - P0: User-supplied real product images
-- P1: Real payment integration (Stripe) — currently mocked checkout
-- P1: Admin panel to manage products/reviews
-- P2: Email confirmation on order (Resend/SendGrid)
+- P1: Real payment integration (Stripe) — deferred per user ("Hostinger will connect us to Stripe at migration")
+- P1: Customer order history page (currently only credits visible in Account)
+- P2: Refactor `server.py` into `/app/backend/routes/`, `/models/`, `/services/` modules
 - P2: Wishlist + size guide modal
 - P2: Search with autocomplete
