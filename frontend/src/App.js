@@ -5,6 +5,7 @@ import { CartProvider } from "./context/CartContext";
 import { Navbar } from "./components/Navbar";
 import { Footer } from "./components/Footer";
 import { CartDrawer } from "./components/CartDrawer";
+import { NewsletterPopup } from "./components/NewsletterPopup";
 import HomePage from "./pages/HomePage";
 import CatalogPage from "./pages/CatalogPage";
 import ProductPage from "./pages/ProductPage";
@@ -26,6 +27,7 @@ function App() {
           </Routes>
           <Footer />
           <CartDrawer />
+          <NewsletterPopup />
           <Toaster
             position="bottom-right"
             theme="dark"

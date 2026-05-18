@@ -3,7 +3,9 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import asyncio
 import logging
+import resend
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional
@@ -17,6 +19,13 @@ load_dotenv(ROOT_DIR / '.env')
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
+
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
+SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'onboarding@resend.dev')
+DISCOUNT_CODE = os.environ.get('DISCOUNT_CODE', 'SNEAK10')
+DISCOUNT_PERCENT = os.environ.get('DISCOUNT_PERCENT', '10')
+if RESEND_API_KEY:
+    resend.api_key = RESEND_API_KEY
 
 app = FastAPI(title="OSneakers API")
 api_router = APIRouter(prefix="/api")
@@ -90,6 +99,18 @@ class Order(BaseModel):
     notes: Optional[str] = None
     status: str = "pending"
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class SubscribeRequest(BaseModel):
+    email: EmailStr
+
+
+class SubscribeResponse(BaseModel):
+    email: str
+    discount_code: str
+    discount_percent: int
+    email_sent: bool
+    message: str
 
 
 # ============== Seed Data ==============
@@ -310,6 +331,86 @@ async def get_order(order_number: str):
     if not doc:
         raise HTTPException(404, "Order not found")
     return doc
+
+
+def _welcome_html(discount_code: str, discount_percent: str) -> str:
+    return f"""
+    <!doctype html>
+    <html>
+      <body style="margin:0;padding:0;background:#050505;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#ffffff;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#050505;padding:48px 16px;">
+          <tr><td align="center">
+            <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#0a0a0a;border:1px solid rgba(255,255,255,0.08);">
+              <tr><td style="padding:40px 40px 24px;">
+                <div style="font-size:11px;letter-spacing:3px;color:#00E5FF;font-weight:700;text-transform:uppercase;">[ WELCOME TO THE DROP ]</div>
+                <h1 style="margin:16px 0 0;font-size:42px;line-height:1;letter-spacing:-1.5px;color:#ffffff;font-weight:900;text-transform:uppercase;">You're in.</h1>
+              </td></tr>
+              <tr><td style="padding:0 40px 24px;">
+                <p style="margin:0;font-size:15px;line-height:1.7;color:#a1a1aa;font-weight:300;">Thanks for stepping into OSneakers. As promised, here's <strong style="color:#fff;font-weight:600;">{discount_percent}% off</strong> your first drop:</p>
+              </td></tr>
+              <tr><td align="center" style="padding:8px 40px 32px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" style="background:#050505;border:1px solid #00E5FF;">
+                  <tr><td align="center" style="padding:22px 36px;">
+                    <div style="font-size:10px;letter-spacing:4px;color:#71717a;text-transform:uppercase;font-weight:700;margin-bottom:6px;">CODE</div>
+                    <div style="font-family:'Courier New',monospace;font-size:32px;letter-spacing:6px;color:#00E5FF;font-weight:700;">{discount_code}</div>
+                  </td></tr>
+                </table>
+              </td></tr>
+              <tr><td align="center" style="padding:0 40px 40px;">
+                <a href="https://osneakers.net" style="display:inline-block;background:#00E5FF;color:#050505;padding:16px 36px;font-weight:900;letter-spacing:3px;font-size:12px;text-decoration:none;text-transform:uppercase;">SHOP THE DROP →</a>
+              </td></tr>
+              <tr><td style="padding:24px 40px;border-top:1px solid rgba(255,255,255,0.06);">
+                <p style="margin:0;font-size:11px;color:#71717a;line-height:1.6;">OSneakers · Ontario, Canada · est. 2018<br/>Premium dropshipping for the world's most-wanted sneakers.</p>
+              </td></tr>
+            </table>
+          </td></tr>
+        </table>
+      </body>
+    </html>
+    """
+
+
+@api_router.post("/subscribe", response_model=SubscribeResponse)
+async def subscribe(payload: SubscribeRequest):
+    email = payload.email.lower()
+    discount_pct = int(DISCOUNT_PERCENT)
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    existing = await db.subscribers.find_one({"email": email}, {"_id": 0})
+    if not existing:
+        await db.subscribers.insert_one({
+            "id": str(uuid.uuid4()),
+            "email": email,
+            "discount_code": DISCOUNT_CODE,
+            "subscribed_at": now_iso,
+        })
+
+    email_sent = False
+    message = "Welcome to OSneakers. Your discount code is ready."
+    if RESEND_API_KEY:
+        try:
+            params = {
+                "from": f"OSneakers <{SENDER_EMAIL}>",
+                "to": [email],
+                "subject": f"You're in. Here's {DISCOUNT_PERCENT}% off your first drop.",
+                "html": _welcome_html(DISCOUNT_CODE, DISCOUNT_PERCENT),
+            }
+            result = await asyncio.to_thread(resend.Emails.send, params)
+            email_sent = bool(result.get("id"))
+            logger.info(f"Sent welcome email to {email}: {result.get('id')}")
+        except Exception as e:
+            logger.error(f"Failed to send welcome email to {email}: {e}")
+            message = "Code generated. Email delivery failed but your code is valid."
+    else:
+        message = "Code generated (email service not configured)."
+
+    return SubscribeResponse(
+        email=email,
+        discount_code=DISCOUNT_CODE,
+        discount_percent=discount_pct,
+        email_sent=email_sent,
+        message=message,
+    )
 
 
 # ============== Seed on startup ==============
