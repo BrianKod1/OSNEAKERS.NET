@@ -138,6 +138,17 @@ class CampaignResult(BaseModel):
     expires_at: str
 
 
+class Referral(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    owner_email: str
+    code: str
+    percent: int = 5
+    uses: int = 0
+    credits_earned: float = 0.0
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
 # ============== Seed Data ==============
 SEED_PRODUCTS = [
     # Air Jordan
@@ -347,9 +358,18 @@ async def create_order(payload: OrderCreate):
     subtotal = round(sum(i.price * i.quantity for i in payload.items), 2)
     discount_amount = 0.0
     discount_code = None
-    if payload.discount_code and payload.discount_code.strip().upper() == DISCOUNT_CODE.upper():
-        discount_code = DISCOUNT_CODE
-        discount_amount = round(subtotal * (int(DISCOUNT_PERCENT) / 100.0), 2)
+    discount_type = None
+    discount_percent = 0
+    if payload.discount_code:
+        validation = await validate_discount({
+            "code": payload.discount_code,
+            "email": payload.email,
+        })
+        if validation["valid"]:
+            discount_code = validation["code"]
+            discount_type = validation.get("type")
+            discount_percent = int(validation["percent"])
+            discount_amount = round(subtotal * (discount_percent / 100.0), 2)
     total = round(subtotal - discount_amount, 2)
 
     order_number = f"OS{datetime.now(timezone.utc).strftime('%Y%m%d')}{uuid.uuid4().hex[:6].upper()}"
@@ -369,14 +389,25 @@ async def create_order(payload: OrderCreate):
         notes=payload.notes,
     )
 
-    # Try sending confirmation email
+    # If referral code used, credit owner with 5% of subtotal
+    if discount_type == "referral" and discount_code:
+        credit = round(subtotal * 0.05, 2)
+        await db.referrals.update_one(
+            {"code": discount_code},
+            {"$inc": {"uses": 1, "credits_earned": credit}},
+        )
+
+    # Ensure buyer has their own referral code
+    buyer_ref = await _get_or_create_referral(payload.email)
+
+    # Send confirmation email
     if RESEND_API_KEY:
         try:
             params = {
                 "from": f"OSneakers <{SENDER_EMAIL}>",
                 "to": [payload.email],
                 "subject": f"Order {order_number} confirmed · OSneakers",
-                "html": _order_html(order),
+                "html": _order_html(order, buyer_ref["code"]),
             }
             result = await asyncio.to_thread(resend.Emails.send, params)
             order.confirmation_email_sent = bool(result.get("id"))
@@ -433,7 +464,7 @@ def _welcome_html(discount_code: str, discount_percent: str) -> str:
     """
 
 
-def _order_html(order: "Order") -> str:
+def _order_html(order: "Order", referral_code: str = "") -> str:
     rows = "".join(
         f"""<tr>
             <td style="padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.06);color:#fff;font-size:14px;">
@@ -478,10 +509,15 @@ def _order_html(order: "Order") -> str:
                 <td align="right" style="padding:14px 0 6px;border-top:1px solid rgba(255,255,255,0.1);color:#00E5FF;font-family:'Courier New',monospace;font-size:24px;font-weight:700;">${order.total:.2f}</td></tr>
               </table>
             </td></tr>
-            <tr><td style="padding:8px 40px 40px;color:#71717a;font-size:11px;line-height:1.7;">
+            <tr><td style="padding:8px 40px 24px;color:#71717a;font-size:11px;line-height:1.7;">
               <strong style="color:#fff;letter-spacing:2px;text-transform:uppercase;">Ship to</strong><br/>
               {order.customer_name}<br/>{order.address}<br/>{order.city}, {order.country}<br/>{order.phone}
             </td></tr>
+            {f'''<tr><td style="padding:24px 40px;border-top:1px solid rgba(255,255,255,0.06);">
+              <div style="font-size:11px;letter-spacing:3px;color:#CCFF00;font-weight:700;text-transform:uppercase;margin-bottom:8px;">[ SHARE &amp; EARN ]</div>
+              <p style="margin:0 0 12px;color:#a1a1aa;font-size:13px;line-height:1.6;">Share your code — friends get <strong style="color:#fff;">5% off</strong>, you earn <strong style="color:#CCFF00;">5% credit</strong> on every order they place.</p>
+              <div style="font-family:'Courier New',monospace;font-size:22px;letter-spacing:5px;color:#CCFF00;font-weight:700;border:1px solid #CCFF00;padding:14px;text-align:center;">{referral_code}</div>
+            </td></tr>''' if referral_code else ""}
             <tr><td style="padding:24px 40px;border-top:1px solid rgba(255,255,255,0.06);color:#71717a;font-size:11px;">
               OSneakers · Ontario, Canada · est. 2018<br/>Questions? Reply to this email or call +1 (289) 600-7311.
             </td></tr>
@@ -494,18 +530,46 @@ def _order_html(order: "Order") -> str:
 @api_router.post("/validate-discount")
 async def validate_discount(payload: dict):
     code = (payload.get("code") or "").strip().upper()
-    # Static evergreen code from env
+    buyer_email = (payload.get("email") or "").strip().lower()
+    # Static evergreen code
     if code == DISCOUNT_CODE.upper():
-        return {"valid": True, "code": DISCOUNT_CODE, "percent": int(DISCOUNT_PERCENT)}
-    # Active campaign code (case-insensitive, not expired)
+        return {"valid": True, "code": DISCOUNT_CODE, "percent": int(DISCOUNT_PERCENT), "type": "promo"}
+    # Active campaign
     now_iso = datetime.now(timezone.utc).isoformat()
     camp = await db.campaigns.find_one(
-        {"code": code, "expires_at": {"$gt": now_iso}},
-        {"_id": 0},
+        {"code": code, "expires_at": {"$gt": now_iso}}, {"_id": 0},
     )
     if camp:
-        return {"valid": True, "code": camp["code"], "percent": int(camp["percent"])}
-    return {"valid": False, "code": code, "percent": 0}
+        return {"valid": True, "code": camp["code"], "percent": int(camp["percent"]), "type": "campaign"}
+    # Referral code (can't be used by owner themselves)
+    ref = await db.referrals.find_one({"code": code}, {"_id": 0})
+    if ref and ref["owner_email"] != buyer_email:
+        return {"valid": True, "code": ref["code"], "percent": int(ref["percent"]), "type": "referral"}
+    return {"valid": False, "code": code, "percent": 0, "type": None}
+
+
+async def _get_or_create_referral(email: str) -> dict:
+    email = email.lower().strip()
+    existing = await db.referrals.find_one({"owner_email": email}, {"_id": 0})
+    if existing:
+        return existing
+    # Generate code from email prefix + 4 random chars
+    prefix = "".join(c for c in email.split("@")[0] if c.isalnum()).upper()[:6] or "OS"
+    code = f"{prefix}{uuid.uuid4().hex[:4].upper()}"
+    ref = Referral(owner_email=email, code=code).model_dump()
+    await db.referrals.insert_one(ref)
+    return ref
+
+
+@api_router.get("/referral/{email}")
+async def get_referral(email: str):
+    ref = await _get_or_create_referral(email)
+    return {
+        "code": ref["code"],
+        "percent": ref["percent"],
+        "uses": ref["uses"],
+        "credits_earned": ref["credits_earned"],
+    }
 
 
 def _require_admin(passcode: Optional[str]):

@@ -24,8 +24,10 @@ export const CartDrawer = () => {
   const [success, setSuccess] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [discountCode, setDiscountCode] = useState("");
-  const [discount, setDiscount] = useState(null); // { code, percent }
+  const [discount, setDiscount] = useState(null); // { code, percent, type }
   const [validating, setValidating] = useState(false);
+  const [referral, setReferral] = useState(null);
+  const [copiedRef, setCopiedRef] = useState(false);
   const [form, setForm] = useState({
     customer_name: "",
     email: "",
@@ -54,10 +56,17 @@ export const CartDrawer = () => {
     if (!discountCode.trim()) return;
     setValidating(true);
     try {
-      const { data } = await api.post("/validate-discount", { code: discountCode });
+      const { data } = await api.post("/validate-discount", {
+        code: discountCode,
+        email: form.email || undefined,
+      });
       if (data.valid) {
-        setDiscount({ code: data.code, percent: data.percent });
-        toast.success(`${data.percent}% off applied`);
+        setDiscount({ code: data.code, percent: data.percent, type: data.type });
+        toast.success(
+          data.type === "referral"
+            ? `${data.percent}% referral discount applied`
+            : `${data.percent}% off applied`,
+        );
       } else {
         setDiscount(null);
         toast.error("Invalid code");
@@ -98,6 +107,13 @@ export const CartDrawer = () => {
       clear();
       localStorage.removeItem("osneakers_discount");
       toast.success(`Order ${order.order_number} placed!`);
+      // Fetch buyer's referral code
+      try {
+        const { data: ref } = await api.get(`/referral/${encodeURIComponent(payload.email)}`);
+        setReferral(ref);
+      } catch {
+        /* non-fatal */
+      }
     } catch (err) {
       toast.error("Could not place order. Please try again.");
     } finally {
@@ -133,8 +149,8 @@ export const CartDrawer = () => {
         </SheetHeader>
 
         {success ? (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center" data-testid="checkout-success">
-            <div className="h-16 w-16 rounded-full bg-lime-400/10 border border-lime-400/40 flex items-center justify-center mb-6 glow-lime">
+          <div className="flex-1 overflow-y-auto p-8 text-center" data-testid="checkout-success">
+            <div className="h-16 w-16 rounded-full bg-lime-400/10 border border-lime-400/40 flex items-center justify-center mx-auto mb-6 glow-lime">
               <CheckCircle2 className="h-8 w-8 text-lime-400" />
             </div>
             <h3 className="font-display font-black text-3xl mb-3">
@@ -143,10 +159,41 @@ export const CartDrawer = () => {
             <p className="text-zinc-400 text-sm mb-2">
               Order <span className="font-mono-tech text-cyan-400" data-testid="checkout-success-order-number">{success.order_number}</span>
             </p>
-            <p className="text-zinc-500 text-sm max-w-xs">
+            <p className="text-zinc-500 text-sm max-w-xs mx-auto">
               We just emailed {success.email}. Our team will reach out within
               the hour to confirm sizing & payment.
             </p>
+
+            {referral && (
+              <div className="mt-8 text-left glass border border-lime-400/30 p-5" data-testid="referral-block">
+                <p className="text-[10px] tracking-[0.3em] uppercase font-mono-tech text-lime-400 mb-2">
+                  [ SHARE &amp; EARN ]
+                </p>
+                <p className="text-sm text-zinc-300 leading-relaxed mb-4">
+                  Friends get <strong className="text-white">5% off</strong>, you earn{" "}
+                  <strong className="text-lime-400">5% credit</strong> on every order they place.
+                </p>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(referral.code);
+                    setCopiedRef(true);
+                    toast.success("Referral code copied");
+                    setTimeout(() => setCopiedRef(false), 1500);
+                  }}
+                  data-testid="referral-copy-btn"
+                  className="w-full group p-4 border border-lime-400/60 bg-lime-400/5 hover:bg-lime-400/10 transition-all flex items-center justify-between"
+                >
+                  <span className="font-mono-tech text-xl tracking-[5px] text-lime-400 font-bold">
+                    {referral.code}
+                  </span>
+                  <span className="text-[10px] tracking-[0.25em] uppercase text-zinc-400 group-hover:text-lime-400">
+                    {copiedRef ? "COPIED" : "COPY"}
+                  </span>
+                </button>
+              </div>
+            )}
+
             <button
               onClick={closeAll}
               className="mt-8 px-8 py-3 bg-cyan-400 text-black font-display font-bold tracking-[0.2em] text-xs uppercase hover:shadow-[0_0_30px_rgba(0,229,255,0.5)] transition-all"
