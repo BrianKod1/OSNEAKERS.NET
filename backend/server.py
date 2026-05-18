@@ -84,6 +84,7 @@ class OrderCreate(BaseModel):
     total: float
     notes: Optional[str] = None
     discount_code: Optional[str] = None
+    use_credits: bool = False
 
 
 class Order(BaseModel):
@@ -100,6 +101,7 @@ class Order(BaseModel):
     subtotal: float = 0.0
     discount_code: Optional[str] = None
     discount_amount: float = 0.0
+    credits_applied: float = 0.0
     total: float
     notes: Optional[str] = None
     status: str = "pending"
@@ -372,6 +374,20 @@ async def create_order(payload: OrderCreate):
             discount_amount = round(subtotal * (discount_percent / 100.0), 2)
     total = round(subtotal - discount_amount, 2)
 
+    # Apply customer credits (capped at remaining total)
+    credits_applied = 0.0
+    if payload.use_credits and total > 0:
+        buyer_ref_doc = await db.referrals.find_one(
+            {"owner_email": payload.email.lower().strip()}, {"_id": 0}
+        )
+        if buyer_ref_doc and buyer_ref_doc.get("credits_earned", 0) > 0:
+            credits_applied = round(min(buyer_ref_doc["credits_earned"], total), 2)
+            total = round(total - credits_applied, 2)
+            await db.referrals.update_one(
+                {"owner_email": payload.email.lower().strip()},
+                {"$inc": {"credits_earned": -credits_applied}},
+            )
+
     order_number = f"OS{datetime.now(timezone.utc).strftime('%Y%m%d')}{uuid.uuid4().hex[:6].upper()}"
     order = Order(
         order_number=order_number,
@@ -385,6 +401,7 @@ async def create_order(payload: OrderCreate):
         subtotal=subtotal,
         discount_code=discount_code,
         discount_amount=discount_amount,
+        credits_applied=credits_applied,
         total=total,
         notes=payload.notes,
     )

@@ -28,6 +28,8 @@ export const CartDrawer = () => {
   const [validating, setValidating] = useState(false);
   const [referral, setReferral] = useState(null);
   const [copiedRef, setCopiedRef] = useState(false);
+  const [availableCredits, setAvailableCredits] = useState(0);
+  const [useCredits, setUseCredits] = useState(false);
   const [form, setForm] = useState({
     customer_name: "",
     email: "",
@@ -47,7 +49,26 @@ export const CartDrawer = () => {
   }, [discount]);
 
   const discountAmount = discount ? +(subtotal * (discount.percent / 100)).toFixed(2) : 0;
-  const total = +(subtotal - discountAmount).toFixed(2);
+  const afterDiscount = +(subtotal - discountAmount).toFixed(2);
+  const creditsToUse = useCredits ? Math.min(availableCredits, afterDiscount) : 0;
+  const total = +(afterDiscount - creditsToUse).toFixed(2);
+
+  // Fetch available credits when email is entered in checkout
+  useEffect(() => {
+    if (!checkout || !form.email || !form.email.includes("@")) {
+      setAvailableCredits(0);
+      return;
+    }
+    const t = setTimeout(async () => {
+      try {
+        const { data } = await api.get(`/account/${encodeURIComponent(form.email)}`);
+        setAvailableCredits(data.referral?.credits_earned || 0);
+      } catch {
+        setAvailableCredits(0);
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [checkout, form.email]);
 
   const handleField = (k) => (e) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -101,6 +122,7 @@ export const CartDrawer = () => {
         })),
         total,
         discount_code: discount?.code || null,
+        use_credits: useCredits,
       };
       const order = await createOrder(payload);
       setSuccess(order);
@@ -252,6 +274,29 @@ export const CartDrawer = () => {
                 <div className="flex justify-between text-sm text-lime-400" data-testid="checkout-discount-row">
                   <span>Discount ({discount.code})</span>
                   <span className="font-mono-tech">−${discountAmount.toFixed(2)}</span>
+                </div>
+              )}
+              {availableCredits > 0 && (
+                <label className="flex items-center justify-between gap-3 p-2.5 border border-lime-400/30 bg-lime-400/5 cursor-pointer">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={useCredits}
+                      onChange={(e) => setUseCredits(e.target.checked)}
+                      data-testid="checkout-use-credits"
+                      className="accent-lime-400"
+                    />
+                    <span className="text-xs uppercase tracking-[0.15em] text-zinc-300 font-bold">
+                      Use ${Math.min(availableCredits, afterDiscount).toFixed(2)} credit
+                    </span>
+                  </div>
+                  <span className="font-mono-tech text-[10px] text-lime-400">${availableCredits.toFixed(2)} avail</span>
+                </label>
+              )}
+              {creditsToUse > 0 && (
+                <div className="flex justify-between text-sm text-lime-400" data-testid="checkout-credits-row">
+                  <span>Credit</span>
+                  <span className="font-mono-tech">−${creditsToUse.toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between text-sm text-zinc-400">
