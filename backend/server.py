@@ -6,6 +6,8 @@ import os
 import asyncio
 import logging
 import resend
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional
@@ -727,13 +729,15 @@ from fastapi import Header  # noqa: E402
 @api_router.post("/admin/digest")
 async def send_digest(x_admin_passcode: str = Header(default="")):
     _require_admin(x_admin_passcode)
-    # Pick top 3 highlights: prefer new, then featured
+    return await _run_digest()
+
+
+async def _run_digest() -> dict:
     highlights = await db.products.find(
         {"$or": [{"is_new": True}, {"featured": True}]}, {"_id": 0}
     ).sort([("is_new", -1), ("featured", -1)]).to_list(3)
     if not highlights:
         highlights = await db.products.find({}, {"_id": 0}).to_list(3)
-
     subscribers = await db.subscribers.find({}, {"_id": 0, "email": 1}).to_list(10000)
     sent = 0
     failed = 0
@@ -921,6 +925,20 @@ async def seed_db():
         reviews = [Review(**r).model_dump() for r in SEED_REVIEWS]
         await db.reviews.insert_many(reviews)
         logging.info(f"Seeded {len(reviews)} reviews")
+    # Schedule weekly drop digest — Fridays 10:00 America/Toronto (Eastern)
+    try:
+        scheduler = AsyncIOScheduler(timezone="America/Toronto")
+        scheduler.add_job(
+            _run_digest,
+            CronTrigger(day_of_week="fri", hour=10, minute=0),
+            id="weekly_digest",
+            replace_existing=True,
+        )
+        scheduler.start()
+        app.state.scheduler = scheduler
+        logging.info("Weekly digest scheduler started (Fri 10:00 ET)")
+    except Exception as e:
+        logging.error(f"Failed to start scheduler: {e}")
 
 
 app.include_router(api_router)
