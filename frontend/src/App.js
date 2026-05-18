@@ -13,6 +13,7 @@ import AboutPage from "./pages/AboutPage";
 import ReviewsPage from "./pages/ReviewsPage";
 import AdminPage from "./pages/AdminPage";
 import AccountPage from "./pages/AccountPage";
+import OrderDetailPage from "./pages/OrderDetailPage";
 
 function App() {
   return (
@@ -28,6 +29,7 @@ function App() {
             <Route path="/reviews" element={<ReviewsPage />} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/account" element={<AccountPage />} />
+            <Route path="/order/:orderNumber" element={<OrderDetailPage />} />
           </Routes>
           <Footer />
           <CartDrawer />

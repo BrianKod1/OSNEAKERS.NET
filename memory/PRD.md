@@ -44,10 +44,22 @@ Core pages: Home (floating sneaker hero), Catalog (brand/price filters & sort), 
 - ✅ Verified via `/api/subscribe` → `email_sent: true`, no Resend errors in logs
 - ✅ Production emails (welcome, order confirmation, weekly digest, credit reminders) now send from verified domain
 
+## Implemented (Feb 2026 — Backend modular refactor + Order History)
+- ✅ Split `server.py` (1053 lines monolith) into clean modules:
+  - `config.py` (env vars), `database.py` (Mongo client), `models.py` (Pydantic)
+  - `email_templates.py` (HTML templates), `services.py` (helpers + jobs), `seed.py`
+  - `routes/{products,reviews,orders,subscribe,referrals,account,admin}.py`
+- ✅ `server.py` slimmed to 86 lines — pure entry point (middleware + router wiring + scheduler bootstrap)
+- ✅ All endpoints verified: products, brands, reviews, orders, account, admin overview, referral, validate-discount
+- ✅ New endpoint: `GET /api/account/{email}/orders/{order_number}` (scoped order fetch with ownership check)
+- ✅ Customer Order History redesigned in AccountPage — expandable rows showing items with thumbnails, subtotal, discount/credits breakdown, ship-to address, status badge
+- ✅ New dedicated **OrderDetailPage** (`/order/:orderNumber`) — full receipt view with status badge, items, breakdown, ship-to, "what's next" CTA, support footer
+- ✅ Backend lint clean (ruff), frontend lint clean (eslint)
+
 ## Backlog / Next
 - P0: User-supplied real product images
 - P1: Real payment integration (Stripe) — deferred per user ("Hostinger will connect us to Stripe at migration")
-- P1: Customer order history page (currently only credits visible in Account)
-- P2: Refactor `server.py` into `/app/backend/routes/`, `/models/`, `/services/` modules
 - P2: Wishlist + size guide modal
 - P2: Search with autocomplete
+- P2: Order status updates (admin can mark shipped/delivered → triggers email)
+- P2: Multi-tier referral milestones (e.g., refer 3 → free shipping month)
