@@ -63,24 +63,25 @@ Core pages: Home (floating sneaker hero), Catalog (brand/price filters & sort), 
 - ✅ `ProductUpsert` schema extended to accept `gallery: List[str]` so admin API can write multi-image products
 - ✅ Test order email delivered to brian.kodawa@gmail.com (`OS20260518687F2D`) — Resend confirmed `email_sent: true`
 
-## Implemented (Feb 2026 — Catalog finalized to 100% authentic)
-- ✅ **21 real products live** across **14 brands** — entire catalog is now authentic, no stock photos
-- ✅ Wiped 23 Unsplash placeholder products via admin DELETE API
-- ✅ Updated `seed.py` so a fresh DB will not re-seed any placeholder products (real products managed exclusively via admin API)
-- ✅ Reviews still seed for social proof grid
+## Implemented (Feb 2026 — Hostinger migration prep)
+- ✅ Updated reviews — replaced 6 placeholder reviews with 4 real names (Brenda Kodawa, Scott, Tom White, Adrian Omanga) matched to real catalog products
+- ✅ Successfully exported MongoDB via mongodump (6 collections, 45 documents) → restored into MongoDB Atlas free tier (M0 cluster) under new DB name `osneakers`
+- ✅ Created deploy kit at `/app/deploy/`:
+  - `README.md` — full step-by-step Hostinger VPS deploy guide (Ubuntu 22.04, Nginx, Certbot, systemd)
+  - `nginx.conf` — production reverse proxy with gzip, asset caching, React Router fallback
+  - `deploy.sh` — one-command update script (git pull → rebuild → restart)
+  - `backend.env.template` + `frontend.env.production.template` — env file scaffolds
+- ✅ Temporary `/api/_export/db_backup.zip` endpoint added then removed after migration complete
+- ✅ User now has: Atlas cluster live with 45 docs, mongorestore confirmed 0 failures, deploy bundle ready in repo
 
-### Brands now in catalog (alphabetical)
-Air Jordan (2), Amiri (1), Balenciaga (1), Bottega Veneta (2), Dior (1), Fendi (1), KEEN (1), New Balance (2), Nike (4), Off-White (1), Onitsuka Tiger (1), Puma (1), Vans (2), Yeezy (1)
-
-### Price range
-$80 (Off-White Crossed Arrows Tee) → $900 (Balenciaga Stapler / Fendi Match)
-
-## Backlog / Next
-- P1: Real payment integration (Stripe) — deferred per user ("Hostinger will connect us to Stripe at migration")
-- P2: Wishlist + size guide modal (especially helpful for EU/US conversion)
+## Backlog / Next (post-migration)
+- P0: User to click "Save to Github" → push repo to GitHub
+- P0: User to provision Hostinger VPS (KVM 1+) and follow `/app/deploy/README.md`
+- P0: User to rotate Atlas password (shared in chat, needs new value)
+- P1: Wire Stripe integration after VPS is live (Stripe keys from dashboard.stripe.com)
+- P2: Wishlist + size guide modal
 - P2: Search with autocomplete
 - P2: Order status updates (admin can mark shipped/delivered → triggers email)
-- P2: Multi-tier referral milestones (e.g., refer 3 → free shipping month)
-- P2: "Authenticity Verified" lightbox on product page (trust signal for dropshipping)
-- P2: "View Order Online" button in confirmation email (links to /order/:orderNumber)
-- P2: Homepage marquee of featured product images (live drop energy)
+- P2: "Authenticity Verified" lightbox on product page
+- P2: "View Order Online" button in confirmation emails
+- P2: Multi-tier referral milestones
