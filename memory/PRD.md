@@ -63,29 +63,19 @@ Core pages: Home (floating sneaker hero), Catalog (brand/price filters & sort), 
 - ✅ `ProductUpsert` schema extended to accept `gallery: List[str]` so admin API can write multi-image products
 - ✅ Test order email delivered to brian.kodawa@gmail.com (`OS20260518687F2D`) — Resend confirmed `email_sent: true`
 
-## Implemented (Feb 2026 — Real product catalog phase 1)
-- ✅ 10 real products live across 10 brands (added 2 new brands: **Puma**, **Amiri**)
-- ✅ All products use the new image gallery (1 hero + 4 angles) and dual EU/US sizing where applicable
-- ✅ Catalog brand filter auto-populates from real product data (dynamic via `/api/brands`)
-- ✅ Featured products auto-surface on homepage hero grid
+## Implemented (Feb 2026 — Catalog finalized to 100% authentic)
+- ✅ **21 real products live** across **14 brands** — entire catalog is now authentic, no stock photos
+- ✅ Wiped 23 Unsplash placeholder products via admin DELETE API
+- ✅ Updated `seed.py` so a fresh DB will not re-seed any placeholder products (real products managed exclusively via admin API)
+- ✅ Reviews still seed for social proof grid
 
-### Real catalog inventory
-| # | Product | Brand | Price | Sizes | Tag |
-|---|---|---|---|---|---|
-| 1 | NB 471 'Tan Suede' | New Balance | $180 | EU 36–45 / US 4–11 | — |
-| 2 | Nike AF1 × Supreme 'Sail Box Logo' | Nike | $320 (was $500) | EU 40–45 / US 7–11 | Limited · Featured |
-| 3 | Puma Speedcat OG 'Forest Green' | Puma | $200 | EU 36–45 / US 4–11 | New Drop |
-| 4 | Junya Watanabe × NB 471 | New Balance | $220 | EU 40–45 / US 7–11 | Limited · Featured |
-| 5 | Yeezy Boost 700 'Inertia' | Yeezy | $310 | EU 40–45 / US 7–11 | Hot · Featured |
-| 6 | Air Jordan 4 Retro 'Lightning' | Air Jordan | $380 (was $600) | EU 40–45 / US 7–11 | Limited · Featured |
-| 7 | Amiri MA-1 'White / Black' | Amiri | $810 | EU 37–45 / US 5–11 | Luxury · Featured |
-| 8 | Air Jordan 11 Retro 'Bred' | Air Jordan | $300 | EU 40–46 / US 7–12 | Hot · Featured |
-| 9 | Balenciaga Stapler Sneaker 'Black' | Balenciaga | $900 | EU 40–45 / US 7–11 | Luxury · Featured |
-| 10 | Off-White 'Crossed Arrows' Oversized Tee | Off-White | $80 | M / L / XL / XXL | Hot |
+### Brands now in catalog (alphabetical)
+Air Jordan (2), Amiri (1), Balenciaga (1), Bottega Veneta (2), Dior (1), Fendi (1), KEEN (1), New Balance (2), Nike (4), Off-White (1), Onitsuka Tiger (1), Puma (1), Vans (2), Yeezy (1)
+
+### Price range
+$80 (Off-White Crossed Arrows Tee) → $900 (Balenciaga Stapler / Fendi Match)
 
 ## Backlog / Next
-- P0: Replace remaining 24 Unsplash placeholder products with real photos (continue uploading in batches)
-- P0: Consider removing/hiding placeholder products once real catalog reaches critical mass
 - P1: Real payment integration (Stripe) — deferred per user ("Hostinger will connect us to Stripe at migration")
 - P2: Wishlist + size guide modal (especially helpful for EU/US conversion)
 - P2: Search with autocomplete
@@ -93,3 +83,4 @@ Core pages: Home (floating sneaker hero), Catalog (brand/price filters & sort), 
 - P2: Multi-tier referral milestones (e.g., refer 3 → free shipping month)
 - P2: "Authenticity Verified" lightbox on product page (trust signal for dropshipping)
 - P2: "View Order Online" button in confirmation email (links to /order/:orderNumber)
+- P2: Homepage marquee of featured product images (live drop energy)
