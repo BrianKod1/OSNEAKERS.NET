@@ -1,9 +1,11 @@
 """OSneakers FastAPI entry point — wires middleware, routers, scheduler, seed."""
 import logging
+from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from starlette.middleware.cors import CORSMiddleware
 
 from config import CORS_ORIGINS
@@ -37,6 +39,19 @@ api_router.include_router(subscribe.router)
 api_router.include_router(referrals.router)
 api_router.include_router(account.router)
 api_router.include_router(admin.router)
+
+
+@api_router.get("/_export/db_backup.zip")
+async def download_db_backup():
+    """Temporary export endpoint for the mongodump archive (for Atlas migration)."""
+    backup_path = Path(__file__).parent / "db_backup.zip"
+    if not backup_path.exists():
+        raise HTTPException(404, "Backup not found")
+    return FileResponse(
+        path=backup_path,
+        filename="osneakers_db_backup.zip",
+        media_type="application/zip",
+    )
 
 app.include_router(api_router)
 
