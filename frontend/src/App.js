@@ -14,6 +14,8 @@ import ReviewsPage from "./pages/ReviewsPage";
 import AdminPage from "./pages/AdminPage";
 import AccountPage from "./pages/AccountPage";
 import OrderDetailPage from "./pages/OrderDetailPage";
+import CheckoutSuccessPage from "./pages/CheckoutSuccessPage";
+import CheckoutCancelPage from "./pages/CheckoutCancelPage";
 
 function App() {
   return (
@@ -30,6 +32,8 @@ function App() {
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/account" element={<AccountPage />} />
             <Route path="/order/:orderNumber" element={<OrderDetailPage />} />
+            <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
+            <Route path="/checkout/cancel" element={<CheckoutCancelPage />} />
           </Routes>
           <Footer />
           <CartDrawer />

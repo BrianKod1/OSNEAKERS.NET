@@ -1,0 +1,48 @@
+{
+  "summary": "Stripe Hosted Checkout integration tested end-to-end (backend + frontend). 15/15 pytest tests pass: empty cart→400, shipping rules ($15 below $100, free at/above $100), SNEAK10 discount (subtotal=200 → discount=20, total=180), origin_url honored, pending Order + payment_transactions persisted with stripe_session_id linkage, status polling idempotent + no double-fulfillment for unpaid sessions, webhook returns 400 on invalid body, /validate-discount + GET /orders/{n} regression OK, /products /reviews /subscribe /account regression OK. Frontend e2e: cart preview shows CAD badge + shipping line, PAY WITH STRIPE button fires POST /api/checkout/session → 200, window.location.href redirected to https://checkout.stripe.com/c/pay/cs_test_... successfully. /checkout/cancel renders 'NO CHARGE MADE' with REF query param. /checkout/success polls /api/checkout/status and stays in 'polling' state for unpaid session (correct — does NOT show paid).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ProductPage", "issue": "Missing data-testid on 'BUY NOW' and 'ADD TO CART' buttons — had to fall back to text matching. Add product-buy-now and product-add-to-cart testids.", "selector": "button (BUY NOW / ADD TO CART)", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "CheckoutSuccessPage polling", "issue": "Only 1 poll observed in 22s window when 8 polls expected (MAX_ATTEMPTS=8 × 2s = 16s should transition to error). Page stays in 'polling' indefinitely for unpaid sessions instead of bailing out after MAX_ATTEMPTS. Could be a JS timer issue or React effect cleanup running early. Verify by manually visiting /checkout/success?session_id=<unpaid_session> and watching network tab — frontend should issue 8 GETs then show error state.", "affected_selectors": ["[data-testid=checkout-polling]", "[data-testid=checkout-error]"]}
+    ],
+    "design_issues": [
+      {"screen": "/checkout/success and /checkout/cancel", "issues": ["NewsletterPopup still triggers on transactional pages — distracting during payment confirmation. Consider suppressing on /checkout/* routes."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_checkout_stripe.py",
+    "/app/backend/tests/test_osneakers_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Add data-testid='product-buy-now' (and 'product-add-to-cart') on ProductPage buttons for testability.",
+    "Investigate CheckoutSuccessPage polling — only 1 poll fired in 22s; verify setTimeout(poll, 2000) chain continues after non-paid response, and that attemptsRef.current eventually hits MAX_ATTEMPTS and sets state='error'. Possible cause: React strict-mode double-invocation cleanup setting cancelledRef=true on the active poll chain.",
+    "(Optional) Suppress NewsletterPopup on /checkout/* routes."
+  ],
+  "critical_code_review_comments": [
+    "payments.py:_fetch_status — switching stripe.api_base on every call leaks global state across requests; fine for current pod but flag for prod hardening (use a per-request stripe client).",
+    "payments.py:_fulfill_order — credits debit and referral payout are NOT wrapped in a single transaction. If send_email succeeds but the final order update fails, you get inconsistent state. Consider ordering: mark order paid FIRST (atomic), then send email + accrue referral as side-effects with their own try/except.",
+    "OrderCreate model is still present even though POST /orders is removed — dead code, safe to delete.",
+    "server.py still uses @app.on_event('startup'|'shutdown') — deprecated; migrate to FastAPI lifespan handler (carried from iter 2).",
+    "Shipping is computed twice (backend + CartDrawer.jsx lines 51-56) — risk of drift. Frontend value is display-only since backend recomputes; add a comment to make that clear."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_checkout_stripe.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (15/15)",
+    "frontend": "95% (cart→Stripe redirect, cancel page work; success-page polling stalls after 1 attempt — needs investigation)"
+  },
+  "test_credentials": "STRIPE_API_KEY=sk_test_emergent (backend/.env). Card 4242 4242 4242 4242 NOT exercised (per agent_to_agent_context_note).",
+  "seed_data_creation": "Multiple TEST_ pending orders created in `orders` collection via /api/checkout/session. They will remain in DB unpaid — main agent can prune by deleting where customer_name LIKE 'TEST_%' or email LIKE 'test_%'.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend Stripe flow fully covered by /app/backend/tests/test_checkout_stripe.py — 15 tests, runs in ~15s. To test PAID flow you'd need to either (a) actually drive Stripe's hosted page (not feasible in pod) or (b) inject a payment_transactions doc with payment_status='paid' and call /api/checkout/status. Frontend testids confirmed: cart-total, cart-checkout-btn, checkout-{name|email|phone|address|city|country}, checkout-submit-btn (text='PAY WITH STRIPE →'), checkout-success-page, checkout-polling, checkout-paid, checkout-expired, checkout-error, checkout-cancel-page. Missing testids on ProductPage buy-now/add-to-cart.",
+  "rca of the issue": "CheckoutSuccessPage stalled-polling: useEffect creates `poll` closure, calls it, then `setTimeout(poll, 2000)` schedules next. In React 18 StrictMode dev, useEffect runs twice — first run's cleanup sets cancelledRef.current=true, then second run starts polling but cancelledRef is already true on next tick → polling silently stops. Fix: reset cancelledRef.current=false at the top of useEffect, OR move cancelledRef to a per-effect local variable. This is the most likely cause given the observed 1-poll behavior."
+}

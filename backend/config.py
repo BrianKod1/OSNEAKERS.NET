@@ -18,3 +18,9 @@ ADMIN_PASSCODE = os.environ.get("ADMIN_PASSCODE", "osneakers-admin-2026")
 
 CREDIT_EXPIRY_DAYS = 90
 STORE_URL = os.environ.get("STORE_URL", "https://osneakers.net")
+
+# ---------- Stripe ----------
+STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "")
+CURRENCY = os.environ.get("CURRENCY", "cad")
+SHIPPING_FLAT_RATE = float(os.environ.get("SHIPPING_FLAT_RATE", "15"))
+SHIPPING_FREE_THRESHOLD = float(os.environ.get("SHIPPING_FREE_THRESHOLD", "100"))

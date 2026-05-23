@@ -9,7 +9,7 @@ from starlette.middleware.cors import CORSMiddleware
 from config import CORS_ORIGINS
 from database import close_db, db
 from models import Product, Review
-from routes import account, admin, orders, products, referrals, reviews, subscribe
+from routes import account, admin, orders, payments, products, referrals, reviews, subscribe
 from seed import SEED_PRODUCTS, SEED_REVIEWS
 from services import run_credit_reminder, run_digest
 
@@ -33,6 +33,7 @@ async def root():
 api_router.include_router(products.router)
 api_router.include_router(reviews.router)
 api_router.include_router(orders.router)
+api_router.include_router(payments.router)
 api_router.include_router(subscribe.router)
 api_router.include_router(referrals.router)
 api_router.include_router(account.router)

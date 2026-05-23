@@ -29,3 +29,13 @@ export const createOrder = async (payload) => {
   const { data } = await api.post("/orders", payload);
   return data;
 };
+
+export const createCheckoutSession = async (payload) => {
+  const { data } = await api.post("/checkout/session", payload);
+  return data;
+};
+
+export const getCheckoutStatus = async (sessionId) => {
+  const { data } = await api.get(`/checkout/status/${sessionId}`);
+  return data;
+};

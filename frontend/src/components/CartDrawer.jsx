@@ -7,7 +7,7 @@ import {
 } from "../components/ui/sheet";
 import { useCart } from "../context/CartContext";
 import { Trash2, Plus, Minus, ShoppingBag, X, CheckCircle2, Tag } from "lucide-react";
-import { createOrder, api } from "../lib/api";
+import { createCheckoutSession, api } from "../lib/api";
 import { toast } from "sonner";
 
 export const CartDrawer = () => {
@@ -51,7 +51,9 @@ export const CartDrawer = () => {
   const discountAmount = discount ? +(subtotal * (discount.percent / 100)).toFixed(2) : 0;
   const afterDiscount = +(subtotal - discountAmount).toFixed(2);
   const creditsToUse = useCredits ? Math.min(availableCredits, afterDiscount) : 0;
-  const total = +(afterDiscount - creditsToUse).toFixed(2);
+  const afterCredits = +(afterDiscount - creditsToUse).toFixed(2);
+  const shipping = afterCredits >= 100 ? 0 : 15;
+  const total = +(afterCredits + shipping).toFixed(2);
 
   // Fetch available credits when email is entered in checkout
   useEffect(() => {
@@ -120,25 +122,19 @@ export const CartDrawer = () => {
           quantity: i.quantity,
           image: i.image,
         })),
-        total,
         discount_code: discount?.code || null,
         use_credits: useCredits,
+        origin_url: window.location.origin,
       };
-      const order = await createOrder(payload);
-      setSuccess(order);
-      clear();
-      localStorage.removeItem("osneakers_discount");
-      toast.success(`Order ${order.order_number} placed!`);
-      // Fetch buyer's referral code
-      try {
-        const { data: ref } = await api.get(`/referral/${encodeURIComponent(payload.email)}`);
-        setReferral(ref);
-      } catch {
-        /* non-fatal */
-      }
+      const session = await createCheckoutSession(payload);
+      localStorage.setItem("osneakers_last_session", session.session_id);
+      localStorage.setItem("osneakers_last_order", session.order_number);
+      // Redirect to Stripe Hosted Checkout
+      window.location.href = session.url;
     } catch (err) {
-      toast.error("Could not place order. Please try again.");
-    } finally {
+      toast.error(
+        err?.response?.data?.detail || "Could not start checkout. Please try again."
+      );
       setSubmitting(false);
     }
   };
@@ -301,14 +297,20 @@ export const CartDrawer = () => {
               )}
               <div className="flex justify-between text-sm text-zinc-400">
                 <span>Shipping</span>
-                <span className="font-mono-tech text-lime-400">FREE</span>
+                <span className="font-mono-tech" data-testid="checkout-shipping">
+                  {shipping === 0 ? (
+                    <span className="text-lime-400">FREE</span>
+                  ) : (
+                    `$${shipping.toFixed(2)}`
+                  )}
+                </span>
               </div>
               <div className="flex justify-between items-baseline pt-3 border-t border-white/5">
                 <span className="text-xs tracking-[0.25em] uppercase text-zinc-500 font-bold">
                   Total
                 </span>
                 <span className="font-display font-black text-2xl text-white" data-testid="checkout-total">
-                  ${total.toFixed(2)}
+                  ${total.toFixed(2)} <span className="text-[10px] font-mono-tech text-zinc-500 ml-1">CAD</span>
                 </span>
               </div>
               <div className="flex gap-3 pt-2">
@@ -326,7 +328,7 @@ export const CartDrawer = () => {
                   className="flex-1 px-4 py-3 bg-cyan-400 text-black font-display font-black tracking-[0.2em] text-xs uppercase hover:shadow-[0_0_30px_rgba(0,229,255,0.5)] transition-all disabled:opacity-50"
                   data-testid="checkout-submit-btn"
                 >
-                  {submitting ? "PLACING..." : "CONFIRM ORDER"}
+                  {submitting ? "REDIRECTING..." : "PAY WITH STRIPE →"}
                 </button>
               </div>
             </div>
@@ -466,12 +468,27 @@ export const CartDrawer = () => {
                   <span className="font-mono-tech">−${discountAmount.toFixed(2)}</span>
                 </div>
               )}
+              <div className="flex justify-between text-sm text-zinc-400">
+                <span>Shipping</span>
+                <span className="font-mono-tech">
+                  {shipping === 0 ? (
+                    <span className="text-lime-400">FREE</span>
+                  ) : (
+                    `$${shipping.toFixed(2)}`
+                  )}
+                </span>
+              </div>
+              {shipping > 0 && (
+                <p className="text-[10px] text-zinc-500 -mt-1">
+                  Add ${(100 - afterDiscount).toFixed(2)} more for free shipping
+                </p>
+              )}
               <div className="flex justify-between items-baseline pt-2 border-t border-white/5">
                 <span className="text-xs tracking-[0.25em] uppercase text-zinc-500 font-bold">
                   Total
                 </span>
                 <span className="font-display font-black text-2xl text-white" data-testid="cart-total">
-                  ${total.toFixed(2)}
+                  ${total.toFixed(2)} <span className="text-[10px] font-mono-tech text-zinc-500 ml-1">CAD</span>
                 </span>
               </div>
               <button

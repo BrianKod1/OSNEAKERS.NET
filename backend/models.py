@@ -66,6 +66,21 @@ class OrderCreate(BaseModel):
     use_credits: bool = False
 
 
+class CheckoutSessionCreate(BaseModel):
+    """Frontend payload to initiate Stripe Checkout. Backend recomputes amounts."""
+    customer_name: str
+    email: EmailStr
+    phone: str
+    address: str
+    city: str
+    country: str = "Canada"
+    items: List[OrderItem]
+    notes: Optional[str] = None
+    discount_code: Optional[str] = None
+    use_credits: bool = False
+    origin_url: str
+
+
 class Order(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -81,11 +96,31 @@ class Order(BaseModel):
     discount_code: Optional[str] = None
     discount_amount: float = 0.0
     credits_applied: float = 0.0
+    shipping: float = 0.0
     total: float
     notes: Optional[str] = None
     status: str = "pending"
+    payment_status: str = "unpaid"
+    stripe_session_id: Optional[str] = None
     confirmation_email_sent: bool = False
     created_at: str = Field(default_factory=_now_iso)
+    paid_at: Optional[str] = None
+
+
+class PaymentTransaction(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    session_id: str
+    order_number: str
+    email: str
+    amount: float
+    currency: str
+    payment_status: str = "initiated"  # initiated | paid | failed | expired
+    status: str = "open"  # open | complete | expired
+    metadata: dict = Field(default_factory=dict)
+    fulfilled: bool = False
+    created_at: str = Field(default_factory=_now_iso)
+    updated_at: str = Field(default_factory=_now_iso)
 
 
 # ---------- Subscribers ----------
