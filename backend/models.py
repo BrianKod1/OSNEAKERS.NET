@@ -103,6 +103,7 @@ class Order(BaseModel):
     payment_status: str = "unpaid"
     stripe_session_id: Optional[str] = None
     confirmation_email_sent: bool = False
+    recovery_email_sent: bool = False
     created_at: str = Field(default_factory=_now_iso)
     paid_at: Optional[str] = None
 

@@ -11,7 +11,7 @@ from database import close_db, db
 from models import Product, Review
 from routes import account, admin, orders, payments, products, referrals, reviews, subscribe
 from seed import SEED_PRODUCTS, SEED_REVIEWS
-from services import run_credit_reminder, run_digest
+from services import run_abandoned_cart_recovery, run_credit_reminder, run_digest
 
 logging.basicConfig(
     level=logging.INFO,
@@ -75,9 +75,16 @@ async def on_startup():
             id="weekly_credit_reminder",
             replace_existing=True,
         )
+        # Abandoned-cart recovery — every hour at :15
+        scheduler.add_job(
+            run_abandoned_cart_recovery,
+            CronTrigger(minute=15),
+            id="hourly_abandoned_cart_recovery",
+            replace_existing=True,
+        )
         scheduler.start()
         app.state.scheduler = scheduler
-        logger.info("Background scheduler started (Fri digest 10:00 ET, Mon credit reminder 10:00 ET)")
+        logger.info("Background scheduler started (Fri digest 10:00 ET, Mon credit reminder 10:00 ET, hourly cart recovery)")
     except Exception as e:
         logger.error(f"Failed to start scheduler: {e}")
 

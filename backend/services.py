@@ -87,6 +87,9 @@ async def resolve_discount(code: str, buyer_email: str) -> dict:
     if code == DISCOUNT_CODE.upper():
         return {"valid": True, "code": DISCOUNT_CODE, "percent": DISCOUNT_PERCENT, "type": "promo"}
 
+    if code == "COMEBACK5":
+        return {"valid": True, "code": "COMEBACK5", "percent": 5, "type": "recovery"}
+
     now_iso = datetime.now(timezone.utc).isoformat()
     camp = await db.campaigns.find_one(
         {"code": code, "expires_at": {"$gt": now_iso}}, {"_id": 0}
@@ -148,4 +151,40 @@ async def run_credit_reminder() -> dict:
         )
         if ok:
             sent += 1
+    return {"sent": sent, "candidates": len(candidates)}
+
+
+async def run_abandoned_cart_recovery() -> dict:
+    """Hourly — find pending orders 1h–24h old, not paid, no recovery sent yet. Nudge with COMEBACK5."""
+    from models import Order  # local import to avoid circular ref
+
+    now = datetime.now(timezone.utc)
+    upper = (now - timedelta(hours=1)).isoformat()       # at least 1h old
+    lower = (now - timedelta(hours=24)).isoformat()      # not older than 24h
+    candidates = await db.orders.find(
+        {
+            "status": "pending",
+            "payment_status": {"$ne": "paid"},
+            "recovery_email_sent": {"$ne": True},
+            "created_at": {"$gt": lower, "$lt": upper},
+        },
+        {"_id": 0},
+    ).to_list(10000)
+    sent = 0
+    for doc in candidates:
+        try:
+            order = Order(**doc)
+            ok = await send_email(
+                to=order.email,
+                subject=f"You left {len(order.items)} item(s) at OSneakers — 5% off if you finish today",
+                html=tpl.abandoned_cart_html(order, code="COMEBACK5", percent=5),
+            )
+            await db.orders.update_one(
+                {"order_number": order.order_number},
+                {"$set": {"recovery_email_sent": True, "recovery_email_at": now.isoformat()}},
+            )
+            if ok:
+                sent += 1
+        except Exception as e:
+            logger.error(f"Recovery email failed for {doc.get('order_number')}: {e}")
     return {"sent": sent, "candidates": len(candidates)}

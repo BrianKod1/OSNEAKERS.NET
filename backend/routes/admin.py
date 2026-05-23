@@ -14,7 +14,7 @@ from models import (
     Product,
     ProductUpsert,
 )
-from services import run_credit_reminder, run_digest, send_email
+from services import run_abandoned_cart_recovery, run_credit_reminder, run_digest, send_email
 
 router = APIRouter(prefix="/admin")
 logger = logging.getLogger(__name__)
@@ -62,11 +62,26 @@ async def trigger_digest(x_admin_passcode: str = Header(default="")):
     return await run_digest()
 
 
+@router.post("/abandoned-cart-recovery")
+async def trigger_abandoned_cart_recovery(x_admin_passcode: str = Header(default="")):
+    _require_admin(x_admin_passcode)
+    return await run_abandoned_cart_recovery()
+
+
 @router.get("/overview")
 async def overview(x_admin_passcode: str = Header(default="")):
     _require_admin(x_admin_passcode)
     subs = await db.subscribers.count_documents({})
     orders = await db.orders.count_documents({})
+    paid_orders = await db.orders.count_documents({"status": "paid"})
+    pending_orders = await db.orders.count_documents({
+        "status": "pending",
+        "payment_status": {"$ne": "paid"},
+    })
+    recovered_orders = await db.orders.count_documents({
+        "recovery_email_sent": True,
+        "status": "paid",
+    })
     campaigns = await db.campaigns.count_documents({})
     recent_orders = await db.orders.find({}, {"_id": 0}).sort([("created_at", -1)]).to_list(10)
     recent_subs = await db.subscribers.find({}, {"_id": 0}).sort([("subscribed_at", -1)]).to_list(10)
@@ -76,6 +91,9 @@ async def overview(x_admin_passcode: str = Header(default="")):
     return {
         "subscribers": subs,
         "orders": orders,
+        "paid_orders": paid_orders,
+        "pending_orders": pending_orders,
+        "recovered_orders": recovered_orders,
         "campaigns": campaigns,
         "recent_orders": recent_orders,
         "recent_subscribers": recent_subs,

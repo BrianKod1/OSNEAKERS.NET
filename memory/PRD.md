@@ -99,6 +99,15 @@ Core pages: Home (floating sneaker hero), Catalog (brand/price filters & sort), 
 - ✅ `deploy/backend.env.template` documents Stripe Tax + Wallets activation steps
 - ✅ Backend tests still 15/15 pass after refactor
 
+## Implemented (May 2026 — Abandoned-cart recovery)
+- ✅ Hourly scheduler job `run_abandoned_cart_recovery` (runs at :15 every hour) — finds pending orders 1h–24h old without `paid_at`, sends recovery email with **COMEBACK5** code (5% off)
+- ✅ New `COMEBACK5` discount code wired into `resolve_discount` (type=`recovery`, 5%)
+- ✅ New email template `abandoned_cart_html` — dark neon design matching brand, shows abandoned items + big code + "FINISH CHECKOUT" CTA
+- ✅ Order schema extended with `recovery_email_sent` + `recovery_email_at` (idempotent — never sends twice)
+- ✅ Manual trigger endpoint `POST /api/admin/abandoned-cart-recovery` (admin passcode required)
+- ✅ Admin overview enriched: `paid_orders`, `pending_orders`, `recovered_orders` counts (paid AFTER recovery email = recovered conversion)
+- ✅ End-to-end tested: created stale order, backdated 2h, triggered job → 1 email sent via Resend, second trigger correctly returns 0/0 (idempotent)
+
 ## Backlog / Next
 - P0: User flip `STRIPE_TAX_ENABLED=true` on VPS .env AFTER enabling Stripe Tax + registering for HST/GST/PST in Stripe Dashboard
 - P0: User enable Apple Pay + Google Pay in Stripe Dashboard → Payment Methods (one-click toggle)
