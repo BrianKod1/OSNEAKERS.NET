@@ -5,11 +5,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import stripe
-from emergentintegrations.payments.stripe.checkout import (
-    CheckoutSessionRequest,
-    CheckoutSessionResponse,
-    StripeCheckout,
-)
+from emergentintegrations.payments.stripe.checkout import StripeCheckout
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
@@ -19,6 +15,7 @@ from config import (
     SHIPPING_FLAT_RATE,
     SHIPPING_FREE_THRESHOLD,
     STRIPE_API_KEY,
+    STRIPE_TAX_ENABLED,
 )
 from database import db
 from models import CheckoutSessionCreate, Order, PaymentTransaction
@@ -26,6 +23,16 @@ from services import get_or_create_referral, resolve_discount, send_email
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _configure_stripe() -> None:
+    if not STRIPE_API_KEY:
+        raise HTTPException(500, "Stripe is not configured")
+    stripe.api_key = STRIPE_API_KEY
+    if "sk_test_emergent" in STRIPE_API_KEY:
+        stripe.api_base = "https://integrations.emergentagent.com/stripe"
+    else:
+        stripe.api_base = "https://api.stripe.com"
 
 
 class CheckoutStatus(BaseModel):
@@ -38,6 +45,7 @@ class CheckoutStatus(BaseModel):
 
 
 def _stripe_client(request: Request) -> StripeCheckout:
+    """Used for webhook signature verification only."""
     if not STRIPE_API_KEY:
         raise HTTPException(500, "Stripe is not configured")
     host_url = str(request.base_url).rstrip("/")
@@ -132,32 +140,56 @@ async def create_checkout_session(payload: CheckoutSessionCreate, request: Reque
         "discount_type": amounts["discount_type"] or "",
         "credits_applied": str(amounts["credits_applied"]),
     }
+    # Webhook URL (needed so handle_webhook can pick the right route on incoming event)
+    host_url = str(request.base_url).rstrip("/")
+    metadata["webhook_url"] = f"{host_url}/api/webhook/stripe"
 
-    stripe_checkout = _stripe_client(request)
-    req = CheckoutSessionRequest(
-        amount=float(amounts["total"]),
-        currency=CURRENCY,
+    _configure_stripe()
+    amount_cents = int(round(float(amounts["total"]) * 100))
+    create_kwargs = dict(
+        # 'card' surfaces Apple Pay & Google Pay automatically on supported devices
+        # (must be enabled in Stripe Dashboard → Settings → Payment Methods).
+        payment_method_types=["card"],
+        line_items=[{
+            "price_data": {
+                "currency": CURRENCY,
+                "product_data": {
+                    "name": f"OSneakers order {order_number}",
+                    "description": f"{len(payload.items)} item(s)",
+                },
+                "unit_amount": amount_cents,
+            },
+            "quantity": 1,
+        }],
+        mode="payment",
         success_url=success_url,
         cancel_url=cancel_url,
         metadata=metadata,
+        customer_email=payload.email,
     )
+    if STRIPE_TAX_ENABLED:
+        # Requires Stripe Tax to be enabled in Dashboard + tax registrations configured.
+        # Customer billing address will be collected at checkout for accurate tax computation.
+        create_kwargs["automatic_tax"] = {"enabled": True}
+        create_kwargs["billing_address_collection"] = "required"
+        create_kwargs["customer_creation"] = "always"
+
     try:
-        session: CheckoutSessionResponse = await stripe_checkout.create_checkout_session(req)
-    except Exception as e:
+        session = stripe.checkout.Session.create(**create_kwargs)
+    except stripe.error.StripeError as e:
         logger.exception("Stripe session creation failed")
-        # Rollback the pending order so we don't leave junk
         await db.orders.delete_one({"order_number": order_number})
         raise HTTPException(502, f"Could not initiate checkout: {e}")
 
     # Link session to order
     await db.orders.update_one(
         {"order_number": order_number},
-        {"$set": {"stripe_session_id": session.session_id}},
+        {"$set": {"stripe_session_id": session.id}},
     )
 
     # Create payment_transactions record
     tx = PaymentTransaction(
-        session_id=session.session_id,
+        session_id=session.id,
         order_number=order_number,
         email=payload.email,
         amount=float(amounts["total"]),
@@ -170,7 +202,7 @@ async def create_checkout_session(payload: CheckoutSessionCreate, request: Reque
 
     return {
         "url": session.url,
-        "session_id": session.session_id,
+        "session_id": session.id,
         "order_number": order_number,
     }
 
@@ -258,12 +290,7 @@ async def _fulfill_order(session_id: str, status_resp: CheckoutStatus) -> Option
 
 def _fetch_status(session_id: str) -> CheckoutStatus:
     """Direct Stripe SDK status fetch with retry — emergent proxy has eventual consistency."""
-    if not STRIPE_API_KEY:
-        raise HTTPException(500, "Stripe is not configured")
-    stripe.api_key = STRIPE_API_KEY
-    # Emergent test key routes through their proxy
-    if "sk_test_emergent" in STRIPE_API_KEY:
-        stripe.api_base = "https://integrations.emergentagent.com/stripe"
+    _configure_stripe()
 
     import time as _t
 

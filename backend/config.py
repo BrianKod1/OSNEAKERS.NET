@@ -24,3 +24,4 @@ STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "")
 CURRENCY = os.environ.get("CURRENCY", "cad")
 SHIPPING_FLAT_RATE = float(os.environ.get("SHIPPING_FLAT_RATE", "15"))
 SHIPPING_FREE_THRESHOLD = float(os.environ.get("SHIPPING_FREE_THRESHOLD", "100"))
+STRIPE_TAX_ENABLED = os.environ.get("STRIPE_TAX_ENABLED", "false").lower() == "true"

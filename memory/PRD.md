@@ -90,10 +90,19 @@ Core pages: Home (floating sneaker hero), Catalog (brand/price filters & sort), 
 - ✅ Backend tested 15/15 pytest cases (`/app/backend/tests/test_checkout_stripe.py`)
 - ✅ Frontend e2e verified: cart → Stripe redirect, cancel page, success page polling (8 attempts then error state on bad session)
 
+## Implemented (May 2026 — Wallets + Stripe Tax wiring)
+- ✅ Refactored `create_checkout_session` to use **direct stripe SDK** (was emergentintegrations wrapper) — unlocks `automatic_tax`, wallets, and future Stripe features
+- ✅ Apple Pay & Google Pay surface automatically through `payment_method_types=['card']` once enabled in the user's Stripe Dashboard (Settings → Payment Methods) — zero code change needed beyond that
+- ✅ Stripe Tax wired and gated behind `STRIPE_TAX_ENABLED` env var (default `false`). When `true`, sends `automatic_tax: {enabled: true}` + `billing_address_collection: 'required'` + `customer_creation: 'always'`
+- ✅ Line item now uses descriptive product name (`OSneakers order OS{number}`) for cleaner Stripe receipts
+- ✅ `customer_email` pre-filled so customers don't re-enter email at Stripe
+- ✅ `deploy/backend.env.template` documents Stripe Tax + Wallets activation steps
+- ✅ Backend tests still 15/15 pass after refactor
+
 ## Backlog / Next
-- P0: User pushes repo to GitHub → pulls on VPS → adds `STRIPE_API_KEY=sk_live_...` to VPS `.env` → restarts gunicorn
-- P0: User adds Stripe webhook in dashboard pointing to `https://osneakers.net/api/webhook/stripe` (event: `checkout.session.completed`)
-- P1: Enable Stripe Tax in dashboard (registrations + nexus). Code currently does NOT pass `automatic_tax=true` because emergentintegrations doesn't expose it — needs direct stripe SDK upgrade post-live.
+- P0: User flip `STRIPE_TAX_ENABLED=true` on VPS .env AFTER enabling Stripe Tax + registering for HST/GST/PST in Stripe Dashboard
+- P0: User enable Apple Pay + Google Pay in Stripe Dashboard → Payment Methods (one-click toggle)
+- P0: User add Stripe webhook in dashboard pointing to `https://osneakers.net/api/webhook/stripe` (event: `checkout.session.completed`)
 - P2: Wishlist + size guide modal
 - P2: Search with autocomplete
 - P2: Order status updates (admin can mark shipped/delivered → triggers tracking email)
