@@ -106,8 +106,8 @@ export const Footer = () => {
                 {[
                   ["About", "/about"],
                   ["Reviews", "/reviews"],
-                  ["Authenticity", "/about"],
-                  ["Shipping", "/about"],
+                  ["Track Order", "/track"],
+                  ["Account", "/account"],
                 ].map(([x, to]) => (
                   <li key={x}>
                     <Link

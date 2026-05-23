@@ -15,6 +15,7 @@ async def list_products(
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
     featured: Optional[bool] = None,
+    q: Optional[str] = None,
     sort: Optional[str] = Query(None, regex="^(price_asc|price_desc|newest|featured)$"),
     limit: int = 100,
 ):
@@ -30,6 +31,12 @@ async def list_products(
         query["price"] = price_q
     if featured is not None:
         query["featured"] = featured
+    if q:
+        # Case-insensitive search across name, brand, description
+        import re
+        safe = re.escape(q.strip())
+        regex = {"$regex": safe, "$options": "i"}
+        query["$or"] = [{"name": regex}, {"brand": regex}, {"description": regex}]
 
     sort_spec = [("featured", -1)]
     if sort == "price_asc":
@@ -41,6 +48,19 @@ async def list_products(
 
     docs = await db.products.find(query, {"_id": 0}).sort(sort_spec).to_list(limit)
     return docs
+
+
+@router.get("/search/products")
+async def search_products(q: str = Query(..., min_length=1), limit: int = 8):
+    """Fast autocomplete — returns minimal fields for dropdown rendering."""
+    import re
+    safe = re.escape(q.strip())
+    regex = {"$regex": safe, "$options": "i"}
+    docs = await db.products.find(
+        {"$or": [{"name": regex}, {"brand": regex}]},
+        {"_id": 0, "id": 1, "name": 1, "brand": 1, "price": 1, "image": 1},
+    ).limit(min(limit, 20)).to_list(limit)
+    return {"results": docs, "count": len(docs)}
 
 
 @router.get("/products/{product_id}", response_model=Product)

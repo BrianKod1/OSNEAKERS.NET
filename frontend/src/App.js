@@ -16,6 +16,7 @@ import AccountPage from "./pages/AccountPage";
 import OrderDetailPage from "./pages/OrderDetailPage";
 import CheckoutSuccessPage from "./pages/CheckoutSuccessPage";
 import CheckoutCancelPage from "./pages/CheckoutCancelPage";
+import TrackPage from "./pages/TrackPage";
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
             <Route path="/order/:orderNumber" element={<OrderDetailPage />} />
             <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
             <Route path="/checkout/cancel" element={<CheckoutCancelPage />} />
+            <Route path="/track" element={<TrackPage />} />
           </Routes>
           <Footer />
           <CartDrawer />

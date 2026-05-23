@@ -1,20 +1,34 @@
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import { ShoppingBag, Search, Menu, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useCart } from "../context/CartContext";
+import SearchOverlay from "./SearchOverlay";
 
 const links = [
   { to: "/", label: "Home" },
   { to: "/catalog", label: "Catalog" },
   { to: "/about", label: "About" },
   { to: "/reviews", label: "Reviews" },
+  { to: "/track", label: "Track" },
   { to: "/account", label: "Account" },
 ];
 
 export const Navbar = () => {
   const { count, setIsOpen } = useCart();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const navigate = useNavigate();
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Cmd/Ctrl+K keyboard shortcut
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   return (
     <header
@@ -64,12 +78,14 @@ export const Navbar = () => {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate("/catalog")}
-            className="hidden sm:flex h-9 w-9 items-center justify-center text-zinc-400 hover:text-cyan-400 transition-colors"
+            onClick={() => setSearchOpen(true)}
+            className="hidden sm:flex h-9 items-center gap-2 px-3 border border-white/10 hover:border-cyan-400/60 text-zinc-400 hover:text-cyan-400 transition-all group"
             data-testid="nav-search-btn"
             aria-label="Search"
           >
-            <Search className="h-4 w-4" />
+            <Search className="h-3.5 w-3.5" />
+            <span className="text-[10px] tracking-[0.25em] uppercase font-bold hidden md:inline">SEARCH</span>
+            <kbd className="hidden md:inline font-mono-tech text-[9px] tracking-wider text-zinc-600 group-hover:text-cyan-400/60 transition-colors border border-white/10 px-1 py-0.5">⌘K</kbd>
           </button>
           <button
             onClick={() => setIsOpen(true)}
@@ -101,6 +117,14 @@ export const Navbar = () => {
       {mobileOpen && (
         <div className="md:hidden glass-strong border-t border-white/5">
           <div className="px-6 py-4 flex flex-col gap-4">
+            <button
+              type="button"
+              onClick={() => { setMobileOpen(false); setSearchOpen(true); }}
+              data-testid="nav-mobile-search"
+              className="flex items-center gap-2 text-sm uppercase tracking-[0.25em] font-semibold text-zinc-300"
+            >
+              <Search className="h-4 w-4 text-cyan-400" /> Search
+            </button>
             {links.map((l) => (
               <NavLink
                 key={l.to}
@@ -119,6 +143,8 @@ export const Navbar = () => {
           </div>
         </div>
       )}
+
+      <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
     </header>
   );
 };

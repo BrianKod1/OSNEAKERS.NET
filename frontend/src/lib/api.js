@@ -10,6 +10,16 @@ export const fetchProducts = async (params = {}) => {
   return data;
 };
 
+export const searchProducts = async (q, limit = 8) => {
+  const { data } = await api.get("/search/products", { params: { q, limit } });
+  return data;
+};
+
+export const trackOrder = async (orderNumber, email) => {
+  const { data } = await api.post("/track", { order_number: orderNumber, email });
+  return data;
+};
+
 export const fetchProduct = async (id) => {
   const { data } = await api.get(`/products/${id}`);
   return data;

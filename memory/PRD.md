@@ -126,6 +126,18 @@ Core pages: Home (floating sneaker hero), Catalog (brand/price filters & sort), 
 - ✅ 34/34 backend pytest pass (added `test_fulfillment_and_recovery.py` — 10 new tests covering ship endpoints, tier 1/2/3 recovery, idempotency, SHIPFREE)
 - ✅ Backend lint clean, frontend lint clean
 
+## Implemented (May 2026 — Search Autocomplete + Public Track Page)
+- ✅ **Catalog full-text search**: extended `GET /api/products` with `q` regex search across name/brand/description; new fast endpoint `GET /api/search/products` returns minimal fields (id/name/brand/price/image) for autocomplete dropdown
+- ✅ Catalog page reads `?q=` URL param and renders an active-search chip with clear-X
+- ✅ **`SearchOverlay` component** triggered from navbar — debounced (220ms) search, ↑/↓/Enter/Esc keyboard nav, highlighted active row, popular brand chips when empty, "SEE ALL RESULTS" deep link to filtered catalog
+- ✅ Global **⌘K / Ctrl+K shortcut** opens search anywhere on the site
+- ✅ Mobile search affordance in mobile menu
+- ✅ Search regex escapes special chars so `.*` etc. don't blow up the server
+- ✅ **Public `/track` page** — buyers paste order number + email → live status timeline (Ordered → Paid → Shipped) + tracking link + items
+- ✅ `POST /api/track` requires email match (case-insensitive); returns 404 for mismatch (prevents email enumeration); strips private fields (no stripe_session_id, no internal id)
+- ✅ "Track Order" link added to navbar + footer
+- ✅ 45/45 backend pytest pass (added 11 new tests for track + search)
+
 ## Backlog / Next
 - P0: User flip `STRIPE_TAX_ENABLED=true` on VPS .env AFTER enabling Stripe Tax + registering for HST/GST/PST in Stripe Dashboard
 - P0: User enable Apple Pay + Google Pay in Stripe Dashboard → Payment Methods (one-click toggle)

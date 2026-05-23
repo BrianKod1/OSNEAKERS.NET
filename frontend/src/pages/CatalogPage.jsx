@@ -22,6 +22,7 @@ export default function CatalogPage() {
 
   const brand = searchParams.get("brand") || "All";
   const sort = searchParams.get("sort") || "featured";
+  const q = searchParams.get("q") || "";
 
   const setParam = (key, value) => {
     const next = new URLSearchParams(searchParams);
@@ -40,11 +41,12 @@ export default function CatalogPage() {
     if (brand !== "All") params.brand = brand;
     params.min_price = priceRange[0];
     params.max_price = priceRange[1];
+    if (q.trim()) params.q = q.trim();
     fetchProducts(params).then((d) => {
       setProducts(d);
       setLoading(false);
     });
-  }, [brand, sort, priceRange]);
+  }, [brand, sort, priceRange, q]);
 
   const allBrands = useMemo(() => ["All", ...brands.map((b) => b.name)], [brands]);
 
@@ -59,6 +61,21 @@ export default function CatalogPage() {
           <h1 className="font-display font-black text-5xl sm:text-6xl text-white tracking-tighter">
             CATALOG.
           </h1>
+          {q && (
+            <div className="mt-5 inline-flex items-center gap-2 px-3 py-1.5 border border-cyan-400/40 bg-cyan-400/5" data-testid="catalog-search-chip">
+              <span className="text-[10px] tracking-[0.25em] uppercase font-mono-tech text-zinc-400">SEARCH:</span>
+              <span className="text-sm text-cyan-400 font-display font-bold">"{q}"</span>
+              <button
+                type="button"
+                onClick={() => setParam("q", "")}
+                aria-label="Clear search"
+                data-testid="catalog-search-clear"
+                className="text-zinc-500 hover:text-white ml-1"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="grid lg:grid-cols-12 gap-8">
