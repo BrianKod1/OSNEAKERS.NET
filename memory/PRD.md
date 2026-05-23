@@ -74,14 +74,29 @@ Core pages: Home (floating sneaker hero), Catalog (brand/price filters & sort), 
 - ✅ Temporary `/api/_export/db_backup.zip` endpoint added then removed after migration complete
 - ✅ User now has: Atlas cluster live with 45 docs, mongorestore confirmed 0 failures, deploy bundle ready in repo
 
-## Backlog / Next (post-migration)
-- P0: User to click "Save to Github" → push repo to GitHub
-- P0: User to provision Hostinger VPS (KVM 1+) and follow `/app/deploy/README.md`
-- P0: User to rotate Atlas password (shared in chat, needs new value)
-- P1: Wire Stripe integration after VPS is live (Stripe keys from dashboard.stripe.com)
+## Implemented (May 2026 — Stripe Hosted Checkout)
+- ✅ Replaced mocked checkout with real **Stripe Hosted Checkout** (CAD)
+- ✅ New `POST /api/checkout/session` — server-side compute (subtotal, discount, credits, shipping), creates Stripe session via `emergentintegrations`, persists pending `Order` + `payment_transactions` doc
+- ✅ New `GET /api/checkout/status/{session_id}` — polls Stripe (direct SDK, bypasses upstream lib pydantic bug, retries for proxy eventual consistency); idempotent `_fulfill_order` (transaction `fulfilled` flag prevents double email / double credit debit)
+- ✅ New `POST /api/webhook/stripe` — signature verified via `StripeCheckout.handle_webhook`, re-fetches authoritative status, fulfills
+- ✅ Shipping rules: **$15 CAD flat, FREE over $100 CAD** (config-driven: `SHIPPING_FLAT_RATE`, `SHIPPING_FREE_THRESHOLD`)
+- ✅ Discount codes (SNEAK10, campaign codes, referral codes) + store credits applied BEFORE Stripe redirect (price never trusted from frontend)
+- ✅ Pending order created BEFORE redirect (visible in admin, marked paid after webhook/status confirmation)
+- ✅ Frontend: `CartDrawer` "PAY WITH STRIPE" button redirects to checkout URL; cart preview shows shipping line + free-shipping nudge + CAD badge
+- ✅ Frontend `/checkout/success` polls status (StrictMode-safe), shows order summary + referral block on confirm
+- ✅ Frontend `/checkout/cancel` — "no charge made" page
+- ✅ NewsletterPopup suppressed on `/checkout/*` routes
+- ✅ `/app/deploy/backend.env.template` updated with `STRIPE_API_KEY` + shipping config placeholders for VPS
+- ✅ Backend tested 15/15 pytest cases (`/app/backend/tests/test_checkout_stripe.py`)
+- ✅ Frontend e2e verified: cart → Stripe redirect, cancel page, success page polling (8 attempts then error state on bad session)
+
+## Backlog / Next
+- P0: User pushes repo to GitHub → pulls on VPS → adds `STRIPE_API_KEY=sk_live_...` to VPS `.env` → restarts gunicorn
+- P0: User adds Stripe webhook in dashboard pointing to `https://osneakers.net/api/webhook/stripe` (event: `checkout.session.completed`)
+- P1: Enable Stripe Tax in dashboard (registrations + nexus). Code currently does NOT pass `automatic_tax=true` because emergentintegrations doesn't expose it — needs direct stripe SDK upgrade post-live.
 - P2: Wishlist + size guide modal
 - P2: Search with autocomplete
-- P2: Order status updates (admin can mark shipped/delivered → triggers email)
+- P2: Order status updates (admin can mark shipped/delivered → triggers tracking email)
 - P2: "Authenticity Verified" lightbox on product page
 - P2: "View Order Online" button in confirmation emails
 - P2: Multi-tier referral milestones

@@ -194,14 +194,14 @@ export default function ProductPage() {
             <div className="mt-8 flex flex-col sm:flex-row gap-3">
               <button
                 onClick={handleBuy}
-                data-testid="buy-now-btn"
+                data-testid="product-buy-now"
                 className="flex-1 h-14 bg-cyan-400 text-black font-display font-black tracking-[0.25em] text-sm uppercase hover:shadow-[0_0_40px_rgba(0,229,255,0.6)] transition-all"
               >
                 BUY NOW · ${product.price}
               </button>
               <button
                 onClick={handleBuy}
-                data-testid="add-to-cart-btn"
+                data-testid="product-add-to-cart"
                 className="sm:w-44 h-14 border border-white/15 text-white hover:border-lime-400 hover:text-lime-400 hover:shadow-[0_0_20px_rgba(204,255,0,0.25)] font-display font-bold tracking-[0.2em] text-xs uppercase transition-all"
               >
                 ADD TO CART

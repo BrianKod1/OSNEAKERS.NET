@@ -268,7 +268,10 @@ def _fetch_status(session_id: str) -> CheckoutStatus:
     import time as _t
 
     last_err: Optional[Exception] = None
-    for attempt in range(15):
+    # Real users only reach this endpoint AFTER returning from Stripe (10s+ later),
+    # by which time the proxy has propagated. Few quick retries cover the edge case
+    # of immediately polling after session creation (e.g. tests).
+    for attempt in range(5):
         try:
             session = stripe.checkout.Session.retrieve(session_id)
             meta = session.metadata

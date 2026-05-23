@@ -15,7 +15,6 @@ export default function CheckoutSuccessPage() {
   const [order, setOrder] = useState(null);
   const [referral, setReferral] = useState(null);
   const attemptsRef = useRef(0);
-  const cancelledRef = useRef(false);
   const { clear } = useCart();
 
   useEffect(() => {
@@ -24,11 +23,15 @@ export default function CheckoutSuccessPage() {
       return;
     }
 
+    let cancelled = false;
+    attemptsRef.current = 0;
+
     const poll = async () => {
-      if (cancelledRef.current) return;
+      if (cancelled) return;
       attemptsRef.current += 1;
       try {
         const data = await getCheckoutStatus(sessionId);
+        if (cancelled) return;
         if (data.payment_status === "paid") {
           setOrder(data.order);
           setState("paid");
@@ -42,7 +45,7 @@ export default function CheckoutSuccessPage() {
               const { data: ref } = await api.get(
                 `/referral/${encodeURIComponent(data.order.email)}`
               );
-              setReferral(ref);
+              if (!cancelled) setReferral(ref);
             } catch {
               /* non-fatal */
             }
@@ -59,6 +62,7 @@ export default function CheckoutSuccessPage() {
         }
         setTimeout(poll, POLL_INTERVAL_MS);
       } catch {
+        if (cancelled) return;
         if (attemptsRef.current >= MAX_ATTEMPTS) {
           setState("error");
         } else {
@@ -68,7 +72,7 @@ export default function CheckoutSuccessPage() {
     };
     poll();
     return () => {
-      cancelledRef.current = true;
+      cancelled = true;
     };
   }, [sessionId, clear]);
 

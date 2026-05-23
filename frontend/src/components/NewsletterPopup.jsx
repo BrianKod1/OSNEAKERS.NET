@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { X, Sparkles, Copy, Check } from "lucide-react";
 import { api } from "../lib/api";
 import { toast } from "sonner";
@@ -7,6 +8,7 @@ const STORAGE_KEY = "osneakers_popup_v1";
 const DELAY_MS = 7000;
 
 export const NewsletterPopup = () => {
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -14,10 +16,11 @@ export const NewsletterPopup = () => {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
+    if (location.pathname.startsWith("/checkout")) return;
     if (localStorage.getItem(STORAGE_KEY)) return;
     const t = setTimeout(() => setOpen(true), DELAY_MS);
     return () => clearTimeout(t);
-  }, []);
+  }, [location.pathname]);
 
   const close = () => {
     setOpen(false);
