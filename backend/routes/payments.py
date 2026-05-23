@@ -64,6 +64,7 @@ async def _resolve_amounts(payload: CheckoutSessionCreate) -> dict:
     discount_code = None
     discount_type = None
     discount_percent = 0
+    free_shipping = False
     if payload.discount_code:
         validation = await resolve_discount(payload.discount_code, payload.email)
         if validation["valid"]:
@@ -71,6 +72,8 @@ async def _resolve_amounts(payload: CheckoutSessionCreate) -> dict:
             discount_type = validation.get("type")
             discount_percent = int(validation["percent"])
             discount_amount = round(subtotal * (discount_percent / 100.0), 2)
+            if discount_type == "free_shipping":
+                free_shipping = True
     after_discount = round(subtotal - discount_amount, 2)
 
     credits_available = 0.0
@@ -84,7 +87,7 @@ async def _resolve_amounts(payload: CheckoutSessionCreate) -> dict:
             credits_applied = round(min(credits_available, after_discount), 2)
 
     after_credits = round(after_discount - credits_applied, 2)
-    shipping = _calc_shipping(after_credits)
+    shipping = 0.0 if free_shipping else _calc_shipping(after_credits)
     total = round(max(after_credits + shipping, 0.5), 2)  # Stripe min ~$0.50
 
     return {

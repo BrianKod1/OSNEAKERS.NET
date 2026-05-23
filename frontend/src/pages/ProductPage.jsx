@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { fetchProduct, fetchProducts } from "../lib/api";
-import { ChevronLeft, Shield, Truck, RefreshCw, Star } from "lucide-react";
+import { ChevronLeft, Truck, RefreshCw, Star } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { ProductCard } from "../components/ProductCard";
+import AuthenticityLightbox from "../components/AuthenticityLightbox";
 import { toast } from "sonner";
 
 export default function ProductPage() {
@@ -210,8 +211,8 @@ export default function ProductPage() {
 
             {/* Perks */}
             <div className="mt-10 grid grid-cols-3 gap-3">
+              <AuthenticityLightbox />
               {[
-                [Shield, "AUTHENTIC"],
                 [Truck, "FREE SHIP"],
                 [RefreshCw, "EASY RETURNS"],
               ].map(([Icon, label]) => (

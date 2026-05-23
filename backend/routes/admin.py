@@ -11,10 +11,19 @@ from database import db
 from models import (
     CampaignCreate,
     CampaignResult,
+    Order,
+    OrderShipUpdate,
     Product,
     ProductUpsert,
 )
-from services import run_abandoned_cart_recovery, run_credit_reminder, run_digest, send_email
+from services import (
+    build_tracking_url,
+    run_abandoned_cart_recovery,
+    run_credit_reminder,
+    run_digest,
+    send_email,
+    send_shipped_notification,
+)
 
 router = APIRouter(prefix="/admin")
 logger = logging.getLogger(__name__)
@@ -66,6 +75,59 @@ async def trigger_digest(x_admin_passcode: str = Header(default="")):
 async def trigger_abandoned_cart_recovery(x_admin_passcode: str = Header(default="")):
     _require_admin(x_admin_passcode)
     return await run_abandoned_cart_recovery()
+
+
+@router.get("/orders")
+async def list_orders(
+    status: str | None = None,
+    limit: int = 100,
+    x_admin_passcode: str = Header(default=""),
+):
+    _require_admin(x_admin_passcode)
+    q: dict = {}
+    if status:
+        q["status"] = status
+    docs = await db.orders.find(q, {"_id": 0}).sort([("created_at", -1)]).to_list(min(limit, 500))
+    return {"orders": docs, "count": len(docs)}
+
+
+@router.post("/orders/{order_number}/ship", response_model=Order)
+async def mark_order_shipped(
+    order_number: str,
+    payload: OrderShipUpdate,
+    x_admin_passcode: str = Header(default=""),
+):
+    _require_admin(x_admin_passcode)
+    doc = await db.orders.find_one({"order_number": order_number}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Order not found")
+    if doc.get("status") != "paid":
+        raise HTTPException(400, f"Order is not paid yet (status={doc.get('status')})")
+
+    tracking_url = payload.tracking_url or build_tracking_url(payload.carrier, payload.tracking_number)
+    await db.orders.update_one(
+        {"order_number": order_number},
+        {"$set": {
+            "tracking_carrier": payload.carrier,
+            "tracking_number": payload.tracking_number,
+            "tracking_url": tracking_url,
+        }},
+    )
+    # Send notification (idempotent — flagged on order)
+    await send_shipped_notification(order_number)
+    fresh = await db.orders.find_one({"order_number": order_number}, {"_id": 0})
+    return Order(**fresh)
+
+
+@router.post("/orders/{order_number}/resend-shipped-email")
+async def resend_shipped_email(order_number: str, x_admin_passcode: str = Header(default="")):
+    _require_admin(x_admin_passcode)
+    # Allow re-send by clearing the flag
+    await db.orders.update_one(
+        {"order_number": order_number},
+        {"$set": {"shipped_email_sent": False}},
+    )
+    return await send_shipped_notification(order_number)
 
 
 @router.get("/overview")

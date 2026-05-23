@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
-import { Lock, Send, Users, ShoppingBag, Sparkles, CheckCircle2 } from "lucide-react";
+import { Lock, Send, Users, ShoppingBag, Sparkles, CheckCircle2, Truck } from "lucide-react";
 import { toast } from "sonner";
+import AdminOrdersManager from "../components/AdminOrdersManager";
 
 const PASSCODE_KEY = "osneakers_admin_passcode";
 
@@ -113,6 +114,20 @@ export default function AdminPage() {
           <div className="flex gap-2">
             <button
               onClick={async () => {
+                if (!confirm("Run abandoned-cart recovery now?")) return;
+                try {
+                  const { data } = await api.post("/admin/abandoned-cart-recovery", {}, { headers });
+                  toast.success(`Recovery: ${data.sent}/${data.candidates}`);
+                  loadOverview(passcode);
+                } catch { toast.error("Failed"); }
+              }}
+              data-testid="recovery-send-btn"
+              className="px-4 py-3 border border-amber-400/40 text-amber-400 hover:bg-amber-400/10 text-xs font-bold tracking-[0.2em] uppercase transition-all"
+            >
+              CART RECOVERY
+            </button>
+            <button
+              onClick={async () => {
                 if (!confirm("Run credit reminder now?")) return;
                 try {
                   const { data } = await api.post("/admin/credit-reminder", {}, { headers });
@@ -137,20 +152,27 @@ export default function AdminPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid sm:grid-cols-3 gap-5 mb-12">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-10">
           {[
             { Icon: Users, label: "SUBSCRIBERS", val: overview?.subscribers ?? "—", color: "cyan" },
             { Icon: ShoppingBag, label: "ORDERS", val: overview?.orders ?? "—", color: "lime" },
-            { Icon: Sparkles, label: "CAMPAIGNS SENT", val: overview?.campaigns ?? "—", color: "cyan" },
+            { Icon: CheckCircle2, label: "PAID", val: overview?.paid_orders ?? "—", color: "lime" },
+            { Icon: Truck, label: "PENDING", val: overview?.pending_orders ?? "—", color: "cyan" },
+            { Icon: Sparkles, label: "RECOVERED", val: overview?.recovered_orders ?? "—", color: "lime" },
           ].map(({ Icon, label, val, color }) => (
-            <div key={label} className="glass p-6">
-              <div className={`h-10 w-10 rounded-sm border flex items-center justify-center mb-4 ${color === "cyan" ? "border-cyan-400/40 bg-cyan-400/10" : "border-lime-400/40 bg-lime-400/10"}`}>
+            <div key={label} className="glass p-5">
+              <div className={`h-9 w-9 rounded-sm border flex items-center justify-center mb-3 ${color === "cyan" ? "border-cyan-400/40 bg-cyan-400/10" : "border-lime-400/40 bg-lime-400/10"}`}>
                 <Icon className={`h-4 w-4 ${color === "cyan" ? "text-cyan-400" : "text-lime-400"}`} />
               </div>
-              <div className="font-display font-black text-4xl text-white tracking-tighter">{val}</div>
-              <div className="text-[10px] tracking-[0.3em] uppercase text-zinc-500 font-mono-tech mt-1">{label}</div>
+              <div className="font-display font-black text-3xl text-white tracking-tighter">{val}</div>
+              <div className="text-[10px] tracking-[0.25em] uppercase text-zinc-500 font-mono-tech mt-1">{label}</div>
             </div>
           ))}
+        </div>
+
+        {/* Order Fulfillment */}
+        <div className="mb-10">
+          <AdminOrdersManager passcode={passcode} />
         </div>
 
         <div className="grid lg:grid-cols-12 gap-8">

@@ -108,6 +108,24 @@ Core pages: Home (floating sneaker hero), Catalog (brand/price filters & sort), 
 - ✅ Admin overview enriched: `paid_orders`, `pending_orders`, `recovered_orders` counts (paid AFTER recovery email = recovered conversion)
 - ✅ End-to-end tested: created stale order, backdated 2h, triggered job → 1 email sent via Resend, second trigger correctly returns 0/0 (idempotent)
 
+## Implemented (May 2026 — Fulfillment + Tiered Recovery + Authenticity)
+- ✅ **Ship & Track flow**: new `POST /api/admin/orders/{n}/ship` accepts carrier + tracking #, auto-generates tracking URL for major carriers (Canada Post, UPS, FedEx, DHL, Purolator, USPS), sends on-brand `shipped_html` email via Resend, updates order status to `shipped`
+- ✅ `POST /api/admin/orders/{n}/resend-shipped-email` to re-send tracking email
+- ✅ `GET /api/admin/orders?status=` for filterable order list
+- ✅ New `AdminOrdersManager.jsx` component on `/admin` page with status filters (paid/pending/shipped/all), modal-driven SHIP action, tracking link display, RESEND EMAIL button
+- ✅ Admin stats expanded: PAID, PENDING, RECOVERED counts visible at a glance
+- ✅ **Tiered abandoned-cart recovery** (3-touch sequence):
+  - Touch 1: 1–6h old, stage 0 → `COMEBACK5` (5%)
+  - Touch 2: 12–24h old, stage 1 → `COMEBACK10` (10%)
+  - Touch 3: 24–48h old, stage 2 → `SHIPFREE` (free shipping)
+  - Per-tier candidate/sent counts returned by admin endpoint
+  - `recovery_stage` flag on Order prevents tier skipping/duplication
+- ✅ `SHIPFREE` discount code actually waives shipping at checkout (`_resolve_amounts` honors `type='free_shipping'`)
+- ✅ Admin "CART RECOVERY" button next to digest/credit reminder for manual trigger
+- ✅ **Authenticity Verified lightbox**: new `AuthenticityLightbox.jsx` component on ProductPage — interactive modal with 4-step verification process (100-point inspection → brand-verified sourcing → tamper-sealed packaging → 30-day authenticity guarantee), "100% REAL OR YOUR MONEY BACK" headline, CTA close button. Replaces the static AUTHENTIC perk tile.
+- ✅ 34/34 backend pytest pass (added `test_fulfillment_and_recovery.py` — 10 new tests covering ship endpoints, tier 1/2/3 recovery, idempotency, SHIPFREE)
+- ✅ Backend lint clean, frontend lint clean
+
 ## Backlog / Next
 - P0: User flip `STRIPE_TAX_ENABLED=true` on VPS .env AFTER enabling Stripe Tax + registering for HST/GST/PST in Stripe Dashboard
 - P0: User enable Apple Pay + Google Pay in Stripe Dashboard → Payment Methods (one-click toggle)

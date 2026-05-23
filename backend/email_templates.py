@@ -175,6 +175,55 @@ def credit_reminder_html(credits: float) -> str:
       </td></tr></table></body></html>"""
 
 
+def shipped_html(order) -> str:
+    rows = "".join(
+        f"""<tr>
+            <td width="72" style="padding:10px 14px 10px 0;"><img src="{i.image}" width="64" height="64" style="display:block;object-fit:cover;border:1px solid rgba(255,255,255,0.08);"/></td>
+            <td style="vertical-align:top;padding:10px 0;color:#fff;font-size:14px;">
+                <strong style="color:#fff;font-weight:600;">{i.name}</strong>
+                <div style="color:#71717a;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-top:2px;">
+                    {f"Size {i.size} · " if i.size else ""}Qty {i.quantity}
+                </div>
+            </td>
+        </tr>"""
+        for i in order.items
+    )
+    first_name = order.customer_name.split()[0] if order.customer_name else "there"
+    track_url = order.tracking_url or "#"
+    return f"""<!doctype html><html><body style="margin:0;padding:0;background:#050505;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;color:#fff;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#050505;padding:48px 16px;"><tr><td align="center">
+        <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#0a0a0a;border:1px solid rgba(255,255,255,0.08);">
+          <tr><td style="padding:40px 40px 16px;">
+            <div style="font-size:11px;letter-spacing:3px;color:#00E5FF;font-weight:700;text-transform:uppercase;">[ ON THE WAY ]</div>
+            <h1 style="margin:14px 0 0;font-size:38px;line-height:1;letter-spacing:-1.5px;font-weight:900;text-transform:uppercase;">{first_name}, it's shipping.</h1>
+            <p style="margin:10px 0 0;font-size:12px;letter-spacing:3px;color:#71717a;text-transform:uppercase;font-weight:700;">{order.order_number}</p>
+          </td></tr>
+          <tr><td style="padding:16px 40px 8px;color:#a1a1aa;font-size:14px;line-height:1.7;">
+            Your order is officially out for delivery via <strong style="color:#fff;">{order.tracking_carrier}</strong>.
+          </td></tr>
+          <tr><td align="center" style="padding:16px 40px;">
+            <table cellpadding="0" cellspacing="0" style="background:#050505;border:1px solid #00E5FF;width:100%;">
+              <tr><td align="center" style="padding:22px 24px;">
+                <div style="font-size:10px;letter-spacing:4px;color:#71717a;text-transform:uppercase;font-weight:700;margin-bottom:6px;">TRACKING #</div>
+                <div style="font-family:'Courier New',monospace;font-size:22px;letter-spacing:3px;color:#00E5FF;font-weight:700;word-break:break-all;">{order.tracking_number}</div>
+              </td></tr>
+            </table>
+          </td></tr>
+          <tr><td align="center" style="padding:0 40px 24px;">
+            <a href="{track_url}" style="display:inline-block;background:#00E5FF;color:#050505;padding:16px 36px;font-weight:900;letter-spacing:3px;font-size:12px;text-decoration:none;text-transform:uppercase;">TRACK PACKAGE →</a>
+          </td></tr>
+          <tr><td style="padding:8px 40px 16px;"><table width="100%">{rows}</table></td></tr>
+          <tr><td style="padding:8px 40px 24px;color:#71717a;font-size:11px;line-height:1.7;">
+            <strong style="color:#fff;letter-spacing:2px;text-transform:uppercase;">Ship to</strong><br/>
+            {order.customer_name}<br/>{order.address}<br/>{order.city}, {order.country}
+          </td></tr>
+          <tr><td style="padding:24px 40px;border-top:1px solid rgba(255,255,255,0.06);color:#71717a;font-size:11px;">
+            OSneakers · Ontario, Canada · est. 2018<br/>Questions? Just reply to this email.
+          </td></tr>
+        </table>
+      </td></tr></table></body></html>"""
+
+
 def abandoned_cart_html(order, code: str, percent: int) -> str:
     rows = "".join(
         f"""<tr>
@@ -189,12 +238,20 @@ def abandoned_cart_html(order, code: str, percent: int) -> str:
         for i in order.items
     )
     first_name = order.customer_name.split()[0] if order.customer_name else "there"
+    is_free_ship = code == "SHIPFREE"
+    badge = "[ LAST CHANCE — FREE SHIPPING ]" if is_free_ship else ("[ STILL THINKING IT OVER? ]" if percent <= 5 else "[ FINAL HOURS — UPGRADED OFFER ]")
+    headline = (
+        f"{first_name}, free ship if you finish now."
+        if is_free_ship
+        else f"{first_name}, your cart is waiting."
+    )
+    code_label = "FREE SHIPPING · CODE" if is_free_ship else f"EXTRA {percent}% OFF · CODE"
     return f"""<!doctype html><html><body style="margin:0;padding:0;background:#050505;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,sans-serif;color:#fff;">
       <table width="100%" cellpadding="0" cellspacing="0" style="background:#050505;padding:48px 16px;"><tr><td align="center">
         <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#0a0a0a;border:1px solid rgba(255,255,255,0.08);">
           <tr><td style="padding:40px 40px 16px;">
-            <div style="font-size:11px;letter-spacing:3px;color:#CCFF00;font-weight:700;text-transform:uppercase;">[ STILL THINKING IT OVER? ]</div>
-            <h1 style="margin:14px 0 0;font-size:38px;line-height:1;letter-spacing:-1.5px;font-weight:900;text-transform:uppercase;">{first_name}, your cart is waiting.</h1>
+            <div style="font-size:11px;letter-spacing:3px;color:#CCFF00;font-weight:700;text-transform:uppercase;">{badge}</div>
+            <h1 style="margin:14px 0 0;font-size:38px;line-height:1;letter-spacing:-1.5px;font-weight:900;text-transform:uppercase;">{headline}</h1>
           </td></tr>
           <tr><td style="padding:16px 40px 8px;color:#a1a1aa;font-size:14px;line-height:1.7;">
             You were one click away from locking in:
@@ -203,7 +260,7 @@ def abandoned_cart_html(order, code: str, percent: int) -> str:
           <tr><td align="center" style="padding:8px 40px 16px;">
             <table cellpadding="0" cellspacing="0" style="background:#050505;border:1px solid #CCFF00;">
               <tr><td align="center" style="padding:22px 36px;">
-                <div style="font-size:10px;letter-spacing:4px;color:#71717a;text-transform:uppercase;font-weight:700;margin-bottom:6px;">EXTRA {percent}% OFF · CODE</div>
+                <div style="font-size:10px;letter-spacing:4px;color:#71717a;text-transform:uppercase;font-weight:700;margin-bottom:6px;">{code_label}</div>
                 <div style="font-family:'Courier New',monospace;font-size:32px;letter-spacing:6px;color:#CCFF00;font-weight:700;">{code}</div>
               </td></tr>
             </table>

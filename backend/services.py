@@ -87,8 +87,14 @@ async def resolve_discount(code: str, buyer_email: str) -> dict:
     if code == DISCOUNT_CODE.upper():
         return {"valid": True, "code": DISCOUNT_CODE, "percent": DISCOUNT_PERCENT, "type": "promo"}
 
+    # Recovery code tiers (issued by run_abandoned_cart_recovery escalation)
     if code == "COMEBACK5":
         return {"valid": True, "code": "COMEBACK5", "percent": 5, "type": "recovery"}
+    if code == "COMEBACK10":
+        return {"valid": True, "code": "COMEBACK10", "percent": 10, "type": "recovery"}
+    if code == "SHIPFREE":
+        # Free-shipping flag — handled at checkout via metadata, but also accepted as 0% promo for tracking
+        return {"valid": True, "code": "SHIPFREE", "percent": 0, "type": "free_shipping"}
 
     now_iso = datetime.now(timezone.utc).isoformat()
     camp = await db.campaigns.find_one(
@@ -155,36 +161,116 @@ async def run_credit_reminder() -> dict:
 
 
 async def run_abandoned_cart_recovery() -> dict:
-    """Hourly — find pending orders 1h–24h old, not paid, no recovery sent yet. Nudge with COMEBACK5."""
+    """Hourly — 3-touch escalating sequence for pending orders.
+
+    Touch 1: 1–6h old, stage=0 → COMEBACK5 (5% off).
+    Touch 2: 12h+ old, stage=1 → COMEBACK10 (10% off).
+    Touch 3: 24h+ old, stage=2 → SHIPFREE (free shipping). Final touch.
+    """
     from models import Order  # local import to avoid circular ref
 
     now = datetime.now(timezone.utc)
-    upper = (now - timedelta(hours=1)).isoformat()       # at least 1h old
-    lower = (now - timedelta(hours=24)).isoformat()      # not older than 24h
-    candidates = await db.orders.find(
-        {
+    h1 = (now - timedelta(hours=1)).isoformat()
+    h6 = (now - timedelta(hours=6)).isoformat()
+    h12 = (now - timedelta(hours=12)).isoformat()
+    h24 = (now - timedelta(hours=24)).isoformat()
+    h48 = (now - timedelta(hours=48)).isoformat()
+
+    tiers = [
+        # (stage_to_set, code, percent, subject, time_filter)
+        (1, "COMEBACK5", 5, "You left {n} item(s) at OSneakers — 5% off if you finish today",
+         {"created_at": {"$gt": h6, "$lt": h1}, "recovery_stage": 0}),
+        (2, "COMEBACK10", 10, "Still thinking? Bump it to 10% off — final hours.",
+         {"created_at": {"$gt": h24, "$lt": h12}, "recovery_stage": 1}),
+        (3, "SHIPFREE", 0, "Last chance — free shipping on your cart, ends tonight.",
+         {"created_at": {"$gt": h48, "$lt": h24}, "recovery_stage": 2}),
+    ]
+
+    total_sent = 0
+    total_candidates = 0
+    by_tier: dict = {}
+
+    for stage, code, percent, subject_tpl, time_filter in tiers:
+        q = {
             "status": "pending",
             "payment_status": {"$ne": "paid"},
-            "recovery_email_sent": {"$ne": True},
-            "created_at": {"$gt": lower, "$lt": upper},
-        },
-        {"_id": 0},
-    ).to_list(10000)
-    sent = 0
-    for doc in candidates:
-        try:
-            order = Order(**doc)
-            ok = await send_email(
-                to=order.email,
-                subject=f"You left {len(order.items)} item(s) at OSneakers — 5% off if you finish today",
-                html=tpl.abandoned_cart_html(order, code="COMEBACK5", percent=5),
-            )
-            await db.orders.update_one(
-                {"order_number": order.order_number},
-                {"$set": {"recovery_email_sent": True, "recovery_email_at": now.isoformat()}},
-            )
-            if ok:
-                sent += 1
-        except Exception as e:
-            logger.error(f"Recovery email failed for {doc.get('order_number')}: {e}")
-    return {"sent": sent, "candidates": len(candidates)}
+            **time_filter,
+        }
+        candidates = await db.orders.find(q, {"_id": 0}).to_list(10000)
+        tier_sent = 0
+        for doc in candidates:
+            try:
+                order = Order(**doc)
+                subject = subject_tpl.format(n=len(order.items))
+                ok = await send_email(
+                    to=order.email,
+                    subject=subject,
+                    html=tpl.abandoned_cart_html(order, code=code, percent=percent),
+                )
+                await db.orders.update_one(
+                    {"order_number": order.order_number},
+                    {"$set": {
+                        "recovery_email_sent": True,
+                        "recovery_stage": stage,
+                        f"recovery_stage_{stage}_at": now.isoformat(),
+                    }},
+                )
+                if ok:
+                    tier_sent += 1
+            except Exception as e:
+                logger.error(f"Recovery touch {stage} failed for {doc.get('order_number')}: {e}")
+        total_sent += tier_sent
+        total_candidates += len(candidates)
+        by_tier[f"stage_{stage}_{code}"] = {"candidates": len(candidates), "sent": tier_sent}
+
+    return {"sent": total_sent, "candidates": total_candidates, "by_tier": by_tier}
+
+
+# ---------- Shipping notification ----------
+CARRIER_TRACKING_URLS = {
+    "canada post": "https://www.canadapost-postescanada.ca/track-reperage/en#/search?searchFor={n}",
+    "ups": "https://www.ups.com/track?tracknum={n}",
+    "fedex": "https://www.fedex.com/fedextrack/?trknbr={n}",
+    "dhl": "https://www.dhl.com/en/express/tracking.html?AWB={n}",
+    "purolator": "https://www.purolator.com/en/shipping/tracker?pin={n}",
+    "usps": "https://tools.usps.com/go/TrackConfirmAction?tLabels={n}",
+}
+
+
+def build_tracking_url(carrier: str, tracking_number: str) -> Optional[str]:
+    if not carrier or not tracking_number:
+        return None
+    key = carrier.strip().lower()
+    template = CARRIER_TRACKING_URLS.get(key)
+    if not template:
+        return None
+    return template.format(n=tracking_number.strip())
+
+
+async def send_shipped_notification(order_number: str) -> dict:
+    """Mark order shipped (requires tracking_carrier/number to be set already) and send email."""
+    from models import Order  # local
+
+    doc = await db.orders.find_one({"order_number": order_number}, {"_id": 0})
+    if not doc:
+        return {"sent": False, "reason": "order_not_found"}
+    if not doc.get("tracking_number") or not doc.get("tracking_carrier"):
+        return {"sent": False, "reason": "missing_tracking"}
+    if doc.get("shipped_email_sent"):
+        return {"sent": False, "reason": "already_sent"}
+
+    order = Order(**doc)
+    ok = await send_email(
+        to=order.email,
+        subject=f"Your OSneakers order is on the way — {order.order_number}",
+        html=tpl.shipped_html(order),
+    )
+    await db.orders.update_one(
+        {"order_number": order_number},
+        {"$set": {
+            "shipped_email_sent": ok,
+            "shipped_at": datetime.now(timezone.utc).isoformat(),
+            "status": "shipped",
+        }},
+    )
+    return {"sent": ok, "reason": "ok" if ok else "send_failed"}

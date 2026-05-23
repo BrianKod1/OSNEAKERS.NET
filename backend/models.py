@@ -104,8 +104,21 @@ class Order(BaseModel):
     stripe_session_id: Optional[str] = None
     confirmation_email_sent: bool = False
     recovery_email_sent: bool = False
+    recovery_stage: int = 0  # 0 none, 1 sent 5%, 2 sent 10%, 3 sent free-ship
     created_at: str = Field(default_factory=_now_iso)
     paid_at: Optional[str] = None
+    # Shipping fulfillment
+    tracking_carrier: Optional[str] = None
+    tracking_number: Optional[str] = None
+    tracking_url: Optional[str] = None
+    shipped_at: Optional[str] = None
+    shipped_email_sent: bool = False
+
+
+class OrderShipUpdate(BaseModel):
+    carrier: str  # e.g. "Canada Post", "FedEx", "UPS"
+    tracking_number: str
+    tracking_url: Optional[str] = None  # If omitted, generated from carrier+number
 
 
 class PaymentTransaction(BaseModel):
